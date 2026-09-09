@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Кардио-калькулятор ОКС</title>
+<meta name="description" content="Определяет тактику ведения пациента по результатам расчёта клинических шкал">
+<meta name="theme-color" content="#3A75C4">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Кардио ОКС">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="app">
+  <!-- Заголовок -->
+  <header id="titleBar">
+    <span id="titleText">Кардио-калькулятор ОКС</span>
+    <button id="menuButton" aria-label="Меню" aria-haspopup="true" aria-expanded="false">
+      <svg viewBox="0 0 24 24" width="22" height="22"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <div id="menuDropdown" class="dropdown" hidden>
+      <button data-action="open-theme">Тема</button>
+      <button data-action="open-formulas">Формулы</button>
+      <button data-action="open-about">О программе</button>
+    </div>
+  </header>
+
+  <!-- Прокручиваемое содержимое -->
+  <main id="content">
+
+    <!-- Блок ввода данных -->
+    <section class="card" id="inputCard">
+      <h2 class="subsection-header rounded-top">Пациент</h2>
+      <div class="subsection-body">
+        <div class="row">
+          <div class="field-wrap grow">
+            <label class="field-label" for="ageInput">Возраст, лет</label>
+            <input class="field-input" id="ageInput" type="number" inputmode="numeric" pattern="[0-9]*">
+          </div>
+          <div class="sex-toggle grow" id="sexToggle">
+            <button class="sex-btn" id="sexMale" data-sex="MALE" type="button">
+              <span class="sex-symbol">♂</span><span class="sex-label">Муж</span>
+            </button>
+            <button class="sex-btn" id="sexFemale" data-sex="FEMALE" type="button">
+              <span class="sex-symbol">♀</span><span class="sex-label">Жен</span>
+            </button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field-wrap grow">
+            <label class="field-label" for="heightInput">Рост, см</label>
+            <input class="field-input" id="heightInput" type="number" inputmode="numeric" pattern="[0-9]*">
+          </div>
+          <div class="field-wrap grow">
+            <label class="field-label" for="weightInput">Масса тела, кг</label>
+            <input class="field-input" id="weightInput" type="number" inputmode="decimal" step="any">
+          </div>
+        </div>
+      </div>
+
+      <h2 class="subsection-header">Лабораторные и витальные показатели</h2>
+      <div class="subsection-body">
+        <div class="row">
+          <div class="field-wrap grow">
+            <label class="field-label" for="hrInput">ЧСС, уд/мин</label>
+            <input class="field-input" id="hrInput" type="number" inputmode="numeric" pattern="[0-9]*">
+          </div>
+          <div class="field-wrap grow">
+            <label class="field-label" for="sbpInput">АД сист. мм рт.ст.</label>
+            <input class="field-input" id="sbpInput" type="number" inputmode="numeric" pattern="[0-9]*">
+          </div>
+        </div>
+        <div class="row">
+          <div class="field-wrap grow">
+            <label class="field-label" for="creatinineInput">Креатинин, мкмоль/л</label>
+            <input class="field-input" id="creatinineInput" type="number" inputmode="decimal" step="any">
+          </div>
+          <div class="field-wrap grow">
+            <label class="field-label" for="hematocritInput">Гематокрит,%</label>
+            <input class="field-input" id="hematocritInput" type="number" inputmode="decimal" step="any">
+          </div>
+        </div>
+      </div>
+
+      <h2 class="subsection-header">Класс ОСН (Killip)</h2>
+      <div class="subsection-body">
+        <div class="select-wrap">
+          <select id="killipSelect" class="field-select"></select>
+          <svg class="select-arrow" viewBox="0 0 24 24" width="20" height="20"><path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <h2 class="subsection-header">Клинические признаки</h2>
+      <div class="subsection-body">
+        <label class="checkbox-row"><input type="checkbox" id="cardiacArrestInput"><span>Остановка сердца при поступлении</span></label>
+        <label class="checkbox-row"><input type="checkbox" id="stDeviationInput"><span>Отклонение сегмента ST на ЭКГ</span></label>
+        <label class="checkbox-row"><input type="checkbox" id="elevatedEnzymesInput"><span>Высокий уровень сердечных ферментов</span></label>
+        <label class="checkbox-row"><input type="checkbox" id="signsOfChfInput"><span>Признаки ХСН при поступлении</span></label>
+        <label class="checkbox-row"><input type="checkbox" id="priorVascularDiseaseInput"><span>Предшествующее сосудистое заболевание (периферический атеросклероз или ОНМК)</span></label>
+        <label class="checkbox-row"><input type="checkbox" id="diabetesInput"><span>Сахарный диабет</span></label>
+      </div>
+    </section>
+
+    <!-- Блок результатов -->
+    <section class="card" id="resultsCard">
+      <div class="results-banner rounded-top">Результаты</div>
+
+      <div class="result-block" id="bmiBlock">
+        <div class="subsection-header result-header">
+          <span>ИМТ (индекс массы тела)</span><span id="bmiValue">—</span>
+        </div>
+        <div class="subsection-body" id="bmiComments"></div>
+      </div>
+
+      <div class="result-block" id="gfrBlock">
+        <div class="subsection-header result-header">
+          <span>СКФ (CKD-EPI 2021)</span><span id="gfrValue">—</span>
+        </div>
+        <div class="subsection-body" id="gfrComments"></div>
+      </div>
+
+      <div class="result-block" id="crclBlock">
+        <div class="subsection-header result-header">
+          <span>Клиренс креатинина (Кокрофт-Голт)</span><span id="crclValue">—</span>
+        </div>
+        <div class="subsection-body" id="crclComments"></div>
+      </div>
+
+      <div class="result-block" id="graceBlock">
+        <div class="subsection-header result-header">
+          <span>Шкала GRACE</span><span id="graceValue">—</span>
+        </div>
+        <div class="subsection-body" id="graceComments"></div>
+      </div>
+
+      <div class="result-block" id="crusadeBlock">
+        <div class="subsection-header result-header">
+          <span>Шкала CRUSADE</span><span id="crusadeValue">—</span>
+        </div>
+        <div class="subsection-body" id="crusadeComments"></div>
+      </div>
+    </section>
+
+    <div style="height:8px"></div>
+  </main>
+</div>
+
+<!-- Диалог "Тема" -->
+<div class="dialog-overlay" id="themeDialogOverlay" hidden>
+  <div class="dialog" role="dialog" aria-labelledby="themeDialogTitle">
+    <h3 id="themeDialogTitle">Тема оформления</h3>
+    <div class="dialog-body">
+      <div class="switch-row">
+        <span>Тёмная тема</span>
+        <label class="switch"><input type="checkbox" id="darkThemeSwitch"><span class="slider"></span></label>
+      </div>
+      <div id="paletteLabel">Цвет фона</div>
+      <div id="palette"></div>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn-text" data-action="cancel-theme">Отмена</button>
+      <button class="btn-text" data-action="confirm-theme">Готово</button>
+    </div>
+  </div>
+</div>
+
+<!-- Диалог "Формулы" -->
+<div class="dialog-overlay" id="formulasDialogOverlay" hidden>
+  <div class="dialog" role="dialog" aria-labelledby="formulasDialogTitle">
+    <h3 id="formulasDialogTitle">Формулы</h3>
+    <div class="dialog-body">
+      <p class="dialog-hint">Выберите блоки, отображаемые в разделе «Результаты»</p>
+      <div class="switch-row"><span>ИМТ (индекс массы тела)</span><label class="switch"><input type="checkbox" id="toggleBmi" checked><span class="slider"></span></label></div>
+      <div class="switch-row"><span>СКФ (CKD-EPI 2021)</span><label class="switch"><input type="checkbox" id="toggleGfr" checked><span class="slider"></span></label></div>
+      <div class="switch-row"><span>Клиренс креатинина (Кокрофт-Голт)</span><label class="switch"><input type="checkbox" id="toggleCrCl" checked><span class="slider"></span></label></div>
+      <div class="switch-row"><span>Шкала GRACE</span><label class="switch"><input type="checkbox" id="toggleGrace" checked><span class="slider"></span></label></div>
+      <div class="switch-row"><span>Шкала CRUSADE</span><label class="switch"><input type="checkbox" id="toggleCrusade" checked><span class="slider"></span></label></div>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn-text" data-action="close-formulas">Готово</button>
+    </div>
+  </div>
+</div>
+
+<!-- Диалог "О программе" -->
+<div class="dialog-overlay" id="aboutDialogOverlay" hidden>
+  <div class="dialog" role="dialog" aria-labelledby="aboutDialogTitle">
+    <h3 id="aboutDialogTitle">О программе</h3>
+    <div class="dialog-body">
+      <p class="about-title">Кардио-калькулятор ОКС</p>
+      <p class="about-version">Версия 1.0 (веб)</p>
+      <p>Приложение рассчитывает вспомогательные клинические показатели по введённым данным: ИМТ, СКФ (CKD-EPI 2021), клиренс креатинина (формула Кокрофта-Голта), шкалу GRACE и шкалу CRUSADE.</p>
+      <p class="about-disclaimer">Важно: приложение не является медицинским изделием и не ставит диагноз. Результаты расчётов носят справочный характер и не заменяют консультацию врача — решения о диагностике и лечении должен принимать квалифицированный медицинский специалист.</p>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn-text" data-action="close-about">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<script src="calculators.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

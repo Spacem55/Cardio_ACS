@@ -1,0 +1,15 @@
+{
+  "name": "Кардио-калькулятор ОКС",
+  "short_name": "Кардио ОКС",
+  "description": "Определяет тактику ведения пациента по результатам расчёта клинических шкал",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#B3261E",
+  "theme_color": "#B3261E",
+  "lang": "ru",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
