@@ -1,556 +1,663 @@
 'use strict';
+// Кардио-калькулятор ОКС — веб-версия (v2.0, "с нуля", версия Android как эталон).
+// Логика построена по полному свежему разбору MainActivity.kt текущей (321) версии
+// приложения: видимость полей, сохранение темы, цветовая математика акцента,
+// переключатель пола (картинки) и т.д. — см. комментарии по ходу файла.
 
-// ---------- Палитра фона (та же, что в Android-версии) ----------
-const BACKGROUND_PALETTE = [
-  '#AECEF9', '#FFF3E0', '#FCE4EC', // пастельные
-  '#FF69B4', // розовый
-  '#AEEA00', // салатовый
-  '#7FFFD4', // аквамарин
-  '#FF7F50', // коралл
-];
+// ===================== Константы (порт из MainActivity.kt) =====================
+
+// Фирменные цвета (ui/theme/Color.kt)
 const CARDIO_PRIMARY = '#3A75C4';
+const CARDIO_BACKGROUND = '#AECEF9';
+const CARDIO_SURFACE = '#FFFFFF';
+const CARDIO_ON_SURFACE = '#1B1B1B';
+const CARDIO_DARK_BACKGROUND = '#1A1A1A';
+const CARDIO_DARK_SURFACE = '#262626';
+const CARDIO_DARK_ON_SURFACE = '#E8E8E8';
+const CARDIO_DARK_ON_SURFACE_VARIANT = '#B0B0B0';
 const CARDIO_DARK_PRIMARY = '#6FA8DC';
-const CARDIO_BACKGROUND_DEFAULT = '#AECEF9';
+const CARDIO_DARK_ON_PRIMARY = '#0D1B2A';
+const CARDIO_DARK_OUTLINE = '#4A4A4A';
+// Material3 baseline "outline" по умолчанию — используется светлой темой приложения,
+// т.к. LightAppColorScheme его не переопределяет (Theme.kt).
+const M3_LIGHT_OUTLINE = '#79747E';
+// Светлая тема НЕ переопределяет onSurfaceVariant отдельным приглушённым тоном —
+// Theme.kt явно задаёт onSurfaceVariant = CardioOnSurface (тот же #1B1B1B, что и onSurface).
 
-const STORAGE_KEY = 'cardio_acs_theme_v1';
+// Палитра фона, порядок радуги (11 цветов) — MainActivity.kt backgroundPalette.
+const BACKGROUND_PALETTE = [
+  '#FF7F50', // коралл
+  '#FFF3E0', // светло-персиковый
+  '#F3D117', // жёлтый
+  '#AEEA00', // салатовый
+  '#09AB18', // зелёный
+  '#7FFFD4', // аквамарин
+  '#AECEF9', // светло-голубой
+  '#0728C5', // синий
+  '#6803B7', // фиолетовый
+  '#FF69B4', // розовый
+  '#FCE4EC'  // светло-розовый
+];
 
-// ---------- Цветовые утилиты (порт accentColorFor / contrastingTextColor / luminance) ----------
+// Сдвиг яркости верхней полосы/полосы "Результаты" в тёмной теме (версия 17).
+const DARK_THEME_ACCENT_TONE_ADJUST = -0.3;
+// Степень затенения переключателя "Пол", когда он не нужен (версия 19): плашка —
+// цвет surface поверх иконок, alpha 0.85 (MaybeUnneededField).
+const UNNEEDED_SHADE_ALPHA = 0.85;
+
+// ===================== Цветовая математика (порт HSV-функций) =====================
 
 function hexToRgb(hex) {
   const h = hex.replace('#', '');
   return {
     r: parseInt(h.substring(0, 2), 16),
     g: parseInt(h.substring(2, 4), 16),
-    b: parseInt(h.substring(4, 6), 16),
+    b: parseInt(h.substring(4, 6), 16)
   };
 }
-
-function rgbToHex({ r, g, b }) {
-  const c = (v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
-  return `#${c(r)}${c(g)}${c(b)}`.toUpperCase();
+function rgbToHex(r, g, b) {
+  const c = (n) => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, '0');
+  return '#' + c(r) + c(g) + c(b);
 }
-
+// android.graphics.Color.colorToHSV — H в градусах [0,360), S,V в [0,1].
 function rgbToHsv({ r, g, b }) {
   r /= 255; g /= 255; b /= 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b);
   const d = max - min;
   let h = 0;
   if (d !== 0) {
-    if (max === r) h = ((g - b) / d) % 6;
-    else if (max === g) h = (b - r) / d + 2;
-    else h = (r - g) / d + 4;
-    h *= 60;
-    if (h < 0) h += 360;
+    if (max === r) h = 60 * (((g - b) / d) % 6);
+    else if (max === g) h = 60 * ((b - r) / d + 2);
+    else h = 60 * ((r - g) / d + 4);
   }
+  if (h < 0) h += 360;
   const s = max === 0 ? 0 : d / max;
   const v = max;
   return { h, s, v };
 }
-
-function hsvToRgb({ h, s, v }) {
+function hsvToRgb(h, s, v) {
   const c = v * s;
   const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
   const m = v - c;
   let r1, g1, b1;
-  if (h < 60) [r1, g1, b1] = [c, x, 0];
-  else if (h < 120) [r1, g1, b1] = [x, c, 0];
-  else if (h < 180) [r1, g1, b1] = [0, c, x];
-  else if (h < 240) [r1, g1, b1] = [0, x, c];
-  else if (h < 300) [r1, g1, b1] = [x, 0, c];
-  else [r1, g1, b1] = [c, 0, x];
+  if (h < 60) { r1 = c; g1 = x; b1 = 0; }
+  else if (h < 120) { r1 = x; g1 = c; b1 = 0; }
+  else if (h < 180) { r1 = 0; g1 = c; b1 = x; }
+  else if (h < 240) { r1 = 0; g1 = x; b1 = c; }
+  else if (h < 300) { r1 = x; g1 = 0; b1 = c; }
+  else { r1 = c; g1 = 0; b1 = x; }
   return { r: (r1 + m) * 255, g: (g1 + m) * 255, b: (b1 + m) * 255 };
 }
-
-/** Relative luminance по формуле sRGB (та же, что Compose Color.luminance()). */
-function luminance(hex) {
-  const { r, g, b } = hexToRgb(hex);
-  const lin = (c) => {
-    const cs = c / 255;
-    return cs <= 0.03928 ? cs / 12.92 : Math.pow((cs + 0.055) / 1.055, 2.4);
+// androidx.compose.ui.graphics.Color.luminance() — относительная яркость (WCAG).
+function relativeLuminance({ r, g, b }) {
+  const chan = (c) => {
+    c /= 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
   };
-  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return 0.2126 * chan(r) + 0.7152 * chan(g) + 0.0722 * chan(b);
 }
-
-function contrastingTextColor(backgroundHex) {
-  return luminance(backgroundHex) > 0.5 ? '#1B1B1B' : '#FFFFFF';
+/** Контрастный (тёмный/светлый) цвет текста для заданного фона. */
+function contrastingTextColor(bgHex) {
+  return relativeLuminance(hexToRgb(bgHex)) > 0.5 ? '#1B1B1B' : '#FFFFFF';
 }
-
-function accentColorFor(backgroundHex, isDark) {
-  const hsv = rgbToHsv(hexToRgb(backgroundHex));
+/** Акцентный цвет заголовков, подобранный в тон выбранному фону (учитывает тёмную тему). */
+function accentColorFor(bgHex, isDark) {
+  const hsv = rgbToHsv(hexToRgb(bgHex));
   if (hsv.s < 0.08) {
     return isDark ? CARDIO_DARK_PRIMARY : CARDIO_PRIMARY;
   }
-  const newHsv = { h: hsv.h, s: isDark ? 0.5 : 0.55, v: isDark ? 0.7 : 0.55 };
-  return rgbToHex(hsvToRgb(newHsv));
+  const s = isDark ? 0.5 : 0.55;
+  const v = isDark ? 0.7 : 0.55;
+  const { r, g, b } = hsvToRgb(hsv.h, s, v);
+  return rgbToHex(r, g, b);
+}
+/** Сдвигает яркость (V) цвета на delta, результат зажат в [0,1]. */
+function adjustLightness(hex, delta) {
+  if (delta === 0) return hex;
+  const hsv = rgbToHsv(hexToRgb(hex));
+  const v = Math.max(0, Math.min(1, hsv.v + delta));
+  const { r, g, b } = hsvToRgb(hsv.h, hsv.s, v);
+  return rgbToHex(r, g, b);
+}
+/** Накладывает alpha-цвет поверх base (оба — hex), имитируя Compose color.copy(alpha=a) на сплошной подложке. */
+function overAlpha(hex, alpha, baseHex) {
+  const a = hexToRgb(hex), b = hexToRgb(baseHex);
+  const mix = (ca, cb) => ca * alpha + cb * (1 - alpha);
+  return rgbToHex(mix(a.r, b.r), mix(a.g, b.g), mix(a.b, b.b));
 }
 
-function hexToRgba(hex, alpha) {
-  const { r, g, b } = hexToRgb(hex);
-  return `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${alpha})`;
-}
+// ===================== Сохранение темы (аналог SharedPreferences) =====================
+const THEME_STORAGE_KEY = 'cardio_theme_prefs_v2';
 
-// ---------- Состояние темы (персистентность через localStorage) ----------
-
-function loadThemeState() {
+function loadThemePrefs() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { background: CARDIO_BACKGROUND_DEFAULT, dark: false };
-    const parsed = JSON.parse(raw);
-    return {
-      background: parsed.background || CARDIO_BACKGROUND_DEFAULT,
-      dark: !!parsed.dark,
-    };
-  } catch (e) {
-    return { background: CARDIO_BACKGROUND_DEFAULT, dark: false };
-  }
+    const raw = localStorage.getItem(THEME_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        background: typeof parsed.background === 'string' ? parsed.background : CARDIO_BACKGROUND,
+        darkTheme: !!parsed.darkTheme
+      };
+    }
+  } catch (e) { /* localStorage недоступен — используем значения по умолчанию */ }
+  return { background: CARDIO_BACKGROUND, darkTheme: false };
 }
-
-function saveThemeState(state) {
+function saveThemePrefs(background, darkTheme) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (e) { /* приватный режим Safari и т.п. — не критично */ }
+    localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify({ background, darkTheme }));
+  } catch (e) { /* сохранение — best effort, как и на Android */ }
 }
 
-let themeState = loadThemeState();
-
-function applyTheme() {
-  const root = document.documentElement;
-  root.setAttribute('data-dark', themeState.dark ? 'true' : 'false');
-  const effectiveBackground = themeState.dark ? '#1A1A1A' : themeState.background;
-  const accent = accentColorFor(effectiveBackground, themeState.dark);
-  const onAccent = contrastingTextColor(accent);
-  root.style.setProperty('--background', effectiveBackground);
-  root.style.setProperty('--accent', accent);
-  root.style.setProperty('--on-accent', onAccent);
-  root.style.setProperty('--accent-14', hexToRgba(accent, 0.14));
-  // color-mix может не поддерживаться старым Safari — используем явный rgba как фактическое значение фона плашек.
-  document.querySelectorAll('.subsection-header, .result-header').forEach((el) => {
-    el.style.background = hexToRgba(accent, 0.14);
-  });
-  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
-  if (themeColorMeta) themeColorMeta.setAttribute('content', accent);
-  saveThemeState(themeState);
-}
-
-// ---------- Ввод данных: состояние формы ----------
-
+// ===================== Состояние приложения =====================
+// Формулы (showBmi..showCrusade) и все поля пациента на Android хранятся только через
+// rememberSaveable (без SharedPreferences) — переживают поворот экрана, но НЕ полный
+// перезапуск приложения. Перезагрузка страницы — ближайший веб-аналог полного
+// перезапуска, поэтому это состояние намеренно НЕ сохраняется в localStorage.
 const state = {
-  sex: Sex.MALE,
-  age: null, height: null, weight: null,
-  creatinine: null, heartRate: null, sbp: null, hematocrit: null,
+  sex: null, // null | 'MALE' | 'FEMALE' — изначально не выбран (версия 20)
+  age: '', height: '', weight: '', creatinine: '', heartRate: '', sbp: '', hematocrit: '',
   cardiacArrest: false, stDeviation: false, elevatedEnzymes: false,
-  killip: Killip.I,
+  killip: 'I',
   signsOfChf: false, priorVascularDisease: false, diabetes: false,
-  visibility: { bmi: true, gfr: true, crCl: true, grace: true, crusade: true },
+  showBmi: true, showGfr: true, showCrCl: true, showGrace: true, showCrusade: true
+};
+const themePrefs = loadThemePrefs();
+let backgroundColor = themePrefs.background;
+let isDarkTheme = themePrefs.darkTheme;
+
+// ===================== Утилиты парсинга (аналог toDoubleOrNullSafe/toIntOrNullSafe) =====================
+function toIntOrNull(s) {
+  const t = (s || '').trim();
+  if (t === '') return null;
+  if (!/^-?\d+$/.test(t)) return null;
+  return parseInt(t, 10);
+}
+function toDoubleOrNull(s) {
+  const t = (s || '').trim().replace(',', '.');
+  if (t === '' || isNaN(Number(t))) return null;
+  return parseFloat(t);
+}
+
+// ===================== DOM refs =====================
+const $ = (id) => document.getElementById(id);
+const el = {
+  app: $('app'),
+  titleBar: $('titleBar'),
+  menuButton: $('menuButton'),
+  menuDropdown: $('menuDropdown'),
+  resetPatientButton: $('resetPatientButton'),
+  patientBlock: $('patientBlock'),
+  labBlock: $('labBlock'),
+  killipBlock: $('killipBlock'),
+  clinicalBlock: $('clinicalBlock'),
+  ageSexRow: $('ageSexRow'),
+  heightWeightRow: $('heightWeightRow'),
+  hrSbpRow: $('hrSbpRow'),
+  creatHematRow: $('creatHematRow'),
+  ageFieldWrap: $('ageFieldWrap'), ageInput: $('ageInput'),
+  heightFieldWrap: $('heightFieldWrap'), heightInput: $('heightInput'),
+  weightFieldWrap: $('weightFieldWrap'), weightInput: $('weightInput'),
+  hrFieldWrap: $('hrFieldWrap'), hrInput: $('hrInput'),
+  sbpFieldWrap: $('sbpFieldWrap'), sbpInput: $('sbpInput'),
+  creatinineFieldWrap: $('creatinineFieldWrap'), creatinineInput: $('creatinineInput'),
+  hematocritFieldWrap: $('hematocritFieldWrap'), hematocritInput: $('hematocritInput'),
+  sexToggle: $('sexToggle'),
+  sexMale: $('sexMale'), sexMaleIcon: $('sexMaleIcon'),
+  sexFemale: $('sexFemale'), sexFemaleIcon: $('sexFemaleIcon'),
+  killipSelect: $('killipSelect'),
+  cardiacArrestInput: $('cardiacArrestInput'),
+  stDeviationInput: $('stDeviationInput'),
+  elevatedEnzymesInput: $('elevatedEnzymesInput'),
+  graceChecks: $('graceChecks'),
+  signsOfChfInput: $('signsOfChfInput'),
+  priorVascularDiseaseInput: $('priorVascularDiseaseInput'),
+  diabetesInput: $('diabetesInput'),
+  crusadeChecks: $('crusadeChecks'),
+  bmiBlock: $('bmiBlock'), bmiValue: $('bmiValue'), bmiComments: $('bmiComments'),
+  gfrBlock: $('gfrBlock'), gfrValue: $('gfrValue'), gfrComments: $('gfrComments'),
+  crclBlock: $('crclBlock'), crclValue: $('crclValue'), crclComments: $('crclComments'),
+  graceBlock: $('graceBlock'), graceValue: $('graceValue'), graceComments: $('graceComments'),
+  crusadeBlock: $('crusadeBlock'), crusadeValue: $('crusadeValue'), crusadeComments: $('crusadeComments'),
+  themeDialogOverlay: $('themeDialogOverlay'),
+  darkThemeSwitch: $('darkThemeSwitch'),
+  palette: $('palette'),
+  formulasDialogOverlay: $('formulasDialogOverlay'),
+  toggleBmi: $('toggleBmi'), toggleGfr: $('toggleGfr'), toggleCrCl: $('toggleCrCl'),
+  toggleGrace: $('toggleGrace'), toggleCrusade: $('toggleCrusade'),
+  aboutDialogOverlay: $('aboutDialogOverlay')
 };
 
-// ---------- Какие поля ввода нужны при текущем наборе включённых формул ----------
-// Порт логики версий 17-18 (Android): поле/строка/блок считаются ненужными, только
-// если ВСЕ формулы, где они участвуют, выключены в "Формулы".
-
-function computeNeeded() {
-  const v = state.visibility;
-  return {
-    age: v.gfr || v.crCl || v.grace || v.crusade,
-    height: v.bmi,
-    weight: v.bmi || v.crCl || v.crusade,
-    sex: v.gfr || v.crCl || v.crusade,
-    creatinine: v.gfr || v.crCl || v.grace || v.crusade,
-    heartRate: v.grace || v.crusade,
-    sbp: v.grace || v.crusade,
-    hematocrit: v.crusade,
-  };
-}
-
-function setFieldNeeded(fieldWrapId, inputId, needed, placeholder) {
-  const wrap = document.getElementById(fieldWrapId);
-  const input = document.getElementById(inputId);
-  wrap.classList.toggle('unneeded', !needed);
-  input.classList.toggle('unneeded', !needed);
-  input.disabled = !needed;
-  input.placeholder = needed ? '' : placeholder;
-}
-
-function applyNeeded() {
-  const needed = computeNeeded();
-
-  // Сброс значения поля, как только оно перестаёт быть нужным (версия 18, item 5).
-  if (!needed.age && state.age !== null) { state.age = null; document.getElementById('ageInput').value = ''; }
-  if (!needed.height && state.height !== null) { state.height = null; document.getElementById('heightInput').value = ''; }
-  if (!needed.weight && state.weight !== null) { state.weight = null; document.getElementById('weightInput').value = ''; }
-  if (!needed.sex) { /* пол не обнуляется — переключатель просто затеняется, как в Android */ }
-  if (!needed.creatinine && state.creatinine !== null) { state.creatinine = null; document.getElementById('creatinineInput').value = ''; }
-  if (!needed.heartRate && state.heartRate !== null) { state.heartRate = null; document.getElementById('hrInput').value = ''; }
-  if (!needed.sbp && state.sbp !== null) { state.sbp = null; document.getElementById('sbpInput').value = ''; }
-  if (!needed.hematocrit && state.hematocrit !== null) { state.hematocrit = null; document.getElementById('hematocritInput').value = ''; }
-
-  setFieldNeeded('ageFieldWrap', 'ageInput', needed.age, 'не требуется');
-  setFieldNeeded('heightFieldWrap', 'heightInput', needed.height, 'не требуется');
-  setFieldNeeded('weightFieldWrap', 'weightInput', needed.weight, 'не требуется');
-  setFieldNeeded('hrFieldWrap', 'hrInput', needed.heartRate, 'не требуется');
-  setFieldNeeded('sbpFieldWrap', 'sbpInput', needed.sbp, 'не требуется');
-  setFieldNeeded('creatinineFieldWrap', 'creatinineInput', needed.creatinine, 'не требуется');
-  setFieldNeeded('hematocritFieldWrap', 'hematocritInput', needed.hematocrit, 'не требуется');
-  document.getElementById('sexToggle').classList.toggle('unneeded', !needed.sex);
-
-  // Строка скрывается целиком, только если ОБА поля в ней не нужны (версия 18, item 4).
-  const ageSexRowNeeded = needed.age || needed.sex;
-  const heightWeightRowNeeded = needed.height || needed.weight;
-  const hrSbpRowNeeded = needed.heartRate || needed.sbp;
-  const creatHematRowNeeded = needed.creatinine || needed.hematocrit;
-  document.getElementById('ageSexRow').hidden = !ageSexRowNeeded;
-  document.getElementById('heightWeightRow').hidden = !heightWeightRowNeeded;
-  document.getElementById('hrSbpRow').hidden = !hrSbpRowNeeded;
-  document.getElementById('creatHematRow').hidden = !creatHematRowNeeded;
-
-  // Блок (вместе с заголовком) скрывается целиком, если ВСЕ его строки не нужны.
-  document.getElementById('patientBlock').hidden = !(ageSexRowNeeded || heightWeightRowNeeded);
-  document.getElementById('labBlock').hidden = !(hrSbpRowNeeded || creatHematRowNeeded);
-  // "Класс ОСН" нужен только GRACE.
-  document.getElementById('killipBlock').hidden = !state.visibility.grace;
-  // Клинические признаки: показываются, если нужны GRACE или CRUSADE; галочки — по отдельности.
-  document.getElementById('clinicalBlock').hidden = !(state.visibility.grace || state.visibility.crusade);
-  document.getElementById('graceChecks').hidden = !state.visibility.grace;
-  document.getElementById('crusadeChecks').hidden = !state.visibility.crusade;
-}
-
-function parseNum(v) {
-  if (v === '' || v === null || v === undefined) return null;
-  const n = parseFloat(String(v).replace(',', '.'));
-  return Number.isFinite(n) ? n : null;
-}
-function parseInt10(v) {
-  if (v === '' || v === null || v === undefined) return null;
-  const n = parseInt(v, 10);
-  return Number.isFinite(n) ? n : null;
-}
-
-function fmt1(n) { return n.toFixed(1); }
-
-// ---------- Рендер результатов ----------
-
-function el(tag, cls, text) {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-
-function renderResults() {
-  const creatinineClearance = (state.age != null && state.weight != null && state.weight > 0 &&
-    state.creatinine != null && state.creatinine > 0)
-    ? cockcroftGault(state.sex, state.age, state.weight, state.creatinine)
-    : null;
-
-  // ИМТ
-  const bmiBlock = document.getElementById('bmiBlock');
-  bmiBlock.hidden = !state.visibility.bmi;
-  if (state.visibility.bmi) {
-    const comments = document.getElementById('bmiComments');
-    comments.innerHTML = '';
-    if (state.height != null && state.height > 0 && state.weight != null && state.weight > 0) {
-      const bmi = calculateBmi(state.weight, state.height);
-      document.getElementById('bmiValue').textContent = fmt1(bmi.value);
-      comments.appendChild(el('p', 'result-comment', '*Единицы измерения: кг/м²'));
-      comments.appendChild(el('p', 'result-comment', `Категория: ${bmi.category}`));
-    } else {
-      document.getElementById('bmiValue').textContent = '—';
-      comments.appendChild(el('p', 'missing-hint', 'Заполните: рост, масса тела'));
-    }
-  }
-
-  // СКФ
-  const gfrBlock = document.getElementById('gfrBlock');
-  gfrBlock.hidden = !state.visibility.gfr;
-  if (state.visibility.gfr) {
-    const comments = document.getElementById('gfrComments');
-    comments.innerHTML = '';
-    if (state.age != null && state.creatinine != null && state.creatinine > 0) {
-      const gfr = ckdEpi2021(state.sex, state.age, state.creatinine);
-      document.getElementById('gfrValue').textContent = fmt1(gfr);
-      comments.appendChild(el('p', 'result-comment', '*Единицы измерения: мл/мин/1.73м²'));
-      comments.appendChild(el('p', 'result-comment', `Стадия ХБП: ${ckdStage(gfr)}`));
-    } else {
-      document.getElementById('gfrValue').textContent = '—';
-      comments.appendChild(el('p', 'missing-hint', 'Заполните: возраст, креатинин'));
-    }
-  }
-
-  // Клиренс креатинина
-  const crclBlock = document.getElementById('crclBlock');
-  crclBlock.hidden = !state.visibility.crCl;
-  if (state.visibility.crCl) {
-    const comments = document.getElementById('crclComments');
-    comments.innerHTML = '';
-    if (creatinineClearance != null) {
-      document.getElementById('crclValue').textContent = fmt1(creatinineClearance);
-      comments.appendChild(el('p', 'result-comment', '*Единицы измерения: мл/мин'));
-      comments.appendChild(el('p', 'result-comment', `Стадия ХБП: ${ckdStage(creatinineClearance)}`));
-    } else {
-      document.getElementById('crclValue').textContent = '—';
-      comments.appendChild(el('p', 'missing-hint', 'Заполните: возраст, масса тела, креатинин'));
-    }
-  }
-
-  // GRACE
-  const graceBlock = document.getElementById('graceBlock');
-  graceBlock.hidden = !state.visibility.grace;
-  if (state.visibility.grace) {
-    const comments = document.getElementById('graceComments');
-    comments.innerHTML = '';
-    if (state.age != null && state.heartRate != null && state.sbp != null &&
-        state.creatinine != null && state.creatinine > 0) {
-      const res = graceScore({
-        age: state.age, heartRate: state.heartRate, sbp: state.sbp,
-        creatinineUmol: state.creatinine, killip: state.killip,
-        cardiacArrestAtAdmission: state.cardiacArrest,
-        stDeviation: state.stDeviation, elevatedEnzymes: state.elevatedEnzymes,
-      });
-      document.getElementById('graceValue').textContent = String(res.points);
-      comments.appendChild(el('p', 'result-comment', '*Единицы измерения: баллы'));
-      comments.appendChild(el('p', 'result-comment', `Категория риска: ${res.riskCategory}`));
-      comments.appendChild(el('p', 'result-comment', `Тактика КАГ: ${res.kagStrategy}, ${res.kagTiming}`));
-    } else {
-      document.getElementById('graceValue').textContent = '—';
-      comments.appendChild(el('p', 'missing-hint', 'Заполните: возраст, ЧСС, АД сист., креатинин'));
-    }
-  }
-
-  // CRUSADE
-  const crusadeBlock = document.getElementById('crusadeBlock');
-  crusadeBlock.hidden = !state.visibility.crusade;
-  if (state.visibility.crusade) {
-    const comments = document.getElementById('crusadeComments');
-    comments.innerHTML = '';
-    if (state.hematocrit != null && creatinineClearance != null &&
-        state.heartRate != null && state.sbp != null) {
-      const res = crusadeScore({
-        hematocrit: state.hematocrit, creatinineClearance,
-        heartRate: state.heartRate, sex: state.sex,
-        signsOfChf: state.signsOfChf, priorVascularDisease: state.priorVascularDisease,
-        diabetes: state.diabetes, sbp: state.sbp,
-      });
-      document.getElementById('crusadeValue').textContent = String(res.points);
-      comments.appendChild(el('p', 'result-comment', '*Единицы измерения: баллы'));
-      comments.appendChild(el('p', 'result-comment', `Категория риска кровотечения: ${res.riskCategory}`));
-      comments.appendChild(el('p', 'result-comment', `Риск крупного кровотечения: ${res.bleedingRiskPercent}`));
-    } else {
-      document.getElementById('crusadeValue').textContent = '—';
-      comments.appendChild(el('p', 'missing-hint', 'Заполните: гематокрит, ЧСС, АД сист. и данные для расчёта клиренса креатинина (возраст, масса, креатинин)'));
-    }
-  }
-
-  applyNeeded();
-  applyTheme(); // перекрашиваем плашки после innerHTML-замены (стиль background ставится инлайново)
-}
-
-// ---------- Обработчики ввода ----------
-
-function bindNumberInput(id, key, parser) {
-  document.getElementById(id).addEventListener('input', (e) => {
-    state[key] = parser(e.target.value);
-    renderResults();
-  });
-}
-
-bindNumberInput('ageInput', 'age', parseInt10);
-bindNumberInput('heightInput', 'height', parseNum);
-bindNumberInput('weightInput', 'weight', parseNum);
-bindNumberInput('hrInput', 'heartRate', parseInt10);
-bindNumberInput('sbpInput', 'sbp', parseInt10);
-bindNumberInput('creatinineInput', 'creatinine', parseNum);
-bindNumberInput('hematocritInput', 'hematocrit', parseNum);
-
-function bindCheckbox(id, key) {
-  document.getElementById(id).addEventListener('change', (e) => {
-    state[key] = e.target.checked;
-    renderResults();
-  });
-}
-bindCheckbox('cardiacArrestInput', 'cardiacArrest');
-bindCheckbox('stDeviationInput', 'stDeviation');
-bindCheckbox('elevatedEnzymesInput', 'elevatedEnzymes');
-bindCheckbox('signsOfChfInput', 'signsOfChf');
-bindCheckbox('priorVascularDiseaseInput', 'priorVascularDisease');
-bindCheckbox('diabetesInput', 'diabetes');
-
-// Пол
-function updateSexButtons() {
-  document.getElementById('sexMale').classList.toggle('active', state.sex === Sex.MALE);
-  document.getElementById('sexFemale').classList.toggle('active', state.sex === Sex.FEMALE);
-}
-document.getElementById('sexMale').addEventListener('click', () => { state.sex = Sex.MALE; updateSexButtons(); renderResults(); });
-document.getElementById('sexFemale').addEventListener('click', () => { state.sex = Sex.FEMALE; updateSexButtons(); renderResults(); });
-updateSexButtons();
-
-// Killip select
-const killipSelect = document.getElementById('killipSelect');
-KillipOrder.forEach((k) => {
-  const opt = document.createElement('option');
-  opt.value = k.key;
-  opt.textContent = k.label;
-  killipSelect.appendChild(opt);
-});
-killipSelect.addEventListener('change', () => {
-  state.killip = KillipOrder.find((k) => k.key === killipSelect.value) || Killip.I;
-  renderResults();
-});
-
-// ---------- Кнопка "Сбросить все данные" (заголовок "Пациент") ----------
-// Сбрасывает поля ввода и клинические признаки; настройки отображения формул
-// и темы не затрагиваются (версия 18, Android).
-document.getElementById('resetPatientButton').addEventListener('click', () => {
-  state.age = null; state.height = null; state.weight = null;
-  state.creatinine = null; state.heartRate = null; state.sbp = null; state.hematocrit = null;
-  state.cardiacArrest = false; state.stDeviation = false; state.elevatedEnzymes = false;
-  state.killip = Killip.I;
-  state.signsOfChf = false; state.priorVascularDisease = false; state.diabetes = false;
-  ['ageInput', 'heightInput', 'weightInput', 'creatinineInput', 'hrInput', 'sbpInput', 'hematocritInput'].forEach((id) => {
-    document.getElementById(id).value = '';
-  });
-  ['cardiacArrestInput', 'stDeviationInput', 'elevatedEnzymesInput', 'signsOfChfInput', 'priorVascularDiseaseInput', 'diabetesInput'].forEach((id) => {
-    document.getElementById(id).checked = false;
-  });
-  killipSelect.value = Killip.I.key;
-  renderResults();
-});
-
-// ---------- Меню (гамбургер) ----------
-
-const menuButton = document.getElementById('menuButton');
-const menuDropdown = document.getElementById('menuDropdown');
-menuButton.addEventListener('click', (e) => {
-  e.stopPropagation();
-  const willShow = menuDropdown.hidden;
-  menuDropdown.hidden = !willShow;
-  menuButton.setAttribute('aria-expanded', String(willShow));
-});
-document.addEventListener('click', () => { menuDropdown.hidden = true; menuButton.setAttribute('aria-expanded', 'false'); });
-menuDropdown.addEventListener('click', (e) => e.stopPropagation());
-
-menuDropdown.querySelector('[data-action="open-theme"]').addEventListener('click', () => {
-  menuDropdown.hidden = true;
-  openThemeDialog();
-});
-menuDropdown.querySelector('[data-action="open-formulas"]').addEventListener('click', () => {
-  menuDropdown.hidden = true;
-  document.getElementById('formulasDialogOverlay').hidden = false;
-});
-menuDropdown.querySelector('[data-action="open-about"]').addEventListener('click', () => {
-  menuDropdown.hidden = true;
-  document.getElementById('aboutDialogOverlay').hidden = false;
-});
-
-// ---------- Диалог "Тема" ----------
-
-const themeDialogOverlay = document.getElementById('themeDialogOverlay');
-const darkThemeSwitch = document.getElementById('darkThemeSwitch');
-const paletteEl = document.getElementById('palette');
-let pendingBackground = themeState.background;
-let pendingDark = themeState.dark;
-
+// ===================== Палитра (диалог "Тема") =====================
 function buildPalette() {
-  paletteEl.innerHTML = '';
-  BACKGROUND_PALETTE.forEach((hex) => {
+  el.palette.innerHTML = '';
+  BACKGROUND_PALETTE.forEach((color) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'swatch';
-    btn.style.background = hex;
+    btn.style.background = color;
+    btn.dataset.color = color;
     btn.addEventListener('click', () => {
-      if (pendingDark) return;
-      pendingBackground = hex;
-      updatePaletteSelection();
+      pendingBackground = color;
+      [...el.palette.children].forEach((c) => c.classList.toggle('selected', c.dataset.color === color));
     });
-    btn.dataset.hex = hex;
-    paletteEl.appendChild(btn);
-  });
-  updatePaletteSelection();
-}
-function updatePaletteSelection() {
-  [...paletteEl.children].forEach((btn) => {
-    btn.classList.toggle('selected', btn.dataset.hex === pendingBackground);
+    el.palette.appendChild(btn);
   });
 }
 buildPalette();
 
+// ===================== Рендер =====================
+function needsFlags() {
+  const ageNeeded = state.showGfr || state.showCrCl || state.showGrace || state.showCrusade;
+  const heightNeeded = state.showBmi;
+  const weightNeeded = state.showBmi || state.showCrCl || state.showCrusade;
+  const sexNeeded = state.showGfr || state.showCrCl || state.showCrusade;
+  const creatinineNeeded = state.showGfr || state.showCrCl || state.showGrace || state.showCrusade;
+  const heartRateNeeded = state.showGrace || state.showCrusade;
+  const sbpNeeded = state.showGrace || state.showCrusade;
+  const hematocritNeeded = state.showCrusade;
+
+  const ageSexRowNeeded = ageNeeded || sexNeeded;
+  const heightWeightRowNeeded = heightNeeded || weightNeeded;
+  const hrSbpRowNeeded = heartRateNeeded || sbpNeeded;
+  const creatinineHematocritRowNeeded = creatinineNeeded || hematocritNeeded;
+
+  const patientBlockNeeded = ageSexRowNeeded || heightWeightRowNeeded;
+  const labBlockNeeded = hrSbpRowNeeded || creatinineHematocritRowNeeded;
+  const clinicalSignsBlockNeeded = state.showGrace || state.showCrusade;
+
+  let firstVisibleInputBlock = null;
+  if (patientBlockNeeded) firstVisibleInputBlock = 'patient';
+  else if (labBlockNeeded) firstVisibleInputBlock = 'lab';
+  else if (state.showGrace) firstVisibleInputBlock = 'killip';
+  else if (clinicalSignsBlockNeeded) firstVisibleInputBlock = 'clinical';
+
+  return {
+    ageNeeded, heightNeeded, weightNeeded, sexNeeded, creatinineNeeded, heartRateNeeded, sbpNeeded, hematocritNeeded,
+    ageSexRowNeeded, heightWeightRowNeeded, hrSbpRowNeeded, creatinineHematocritRowNeeded,
+    patientBlockNeeded, labBlockNeeded, clinicalSignsBlockNeeded, firstVisibleInputBlock
+  };
+}
+
+// Обнуление данных при переходе поля/пункта в "не нужно" (версия 18, item 5) — вызывается
+// ПОСЛЕ пересчёта needs, если какой-то флаг стал false.
+let prevNeeds = null;
+function applyAutoReset(n) {
+  if (!n.ageNeeded) state.age = '';
+  if (!n.heightNeeded) state.height = '';
+  if (!n.weightNeeded) state.weight = '';
+  if (!n.sexNeeded) state.sex = null;
+  if (!n.creatinineNeeded) state.creatinine = '';
+  if (!n.heartRateNeeded) state.heartRate = '';
+  if (!n.sbpNeeded) state.sbp = '';
+  if (!n.hematocritNeeded) state.hematocrit = '';
+  if (!state.showGrace) {
+    state.cardiacArrest = false; state.stDeviation = false; state.elevatedEnzymes = false; state.killip = 'I';
+  }
+  if (!state.showCrusade) {
+    state.signsOfChf = false; state.priorVascularDisease = false; state.diabetes = false;
+  }
+}
+
+function setUnneededInput(inputEl, needed, currentValue) {
+  inputEl.classList.toggle('unneeded', !needed);
+  inputEl.disabled = !needed;
+  if (!needed) {
+    inputEl.value = '';
+    inputEl.placeholder = 'не требуется';
+  } else {
+    if (inputEl.value !== currentValue) inputEl.value = currentValue;
+    inputEl.placeholder = '';
+  }
+}
+
+function render() {
+  const n = needsFlags();
+  applyAutoReset(n);
+
+  // ---- Тема/цвета ----
+  const accentColor = accentColorFor(backgroundColor, isDarkTheme);
+  const topBarColor = isDarkTheme ? adjustLightness(accentColor, DARK_THEME_ACCENT_TONE_ADJUST) : accentColor;
+  const effectiveBackground = isDarkTheme ? CARDIO_DARK_BACKGROUND : backgroundColor;
+  const surface = isDarkTheme ? CARDIO_DARK_SURFACE : CARDIO_SURFACE;
+  const onSurface = isDarkTheme ? CARDIO_DARK_ON_SURFACE : CARDIO_ON_SURFACE;
+  // Светлая тема: onSurfaceVariant = onSurface (Theme.kt не задаёт отдельный приглушённый тон).
+  const onSurfaceVariant = isDarkTheme ? CARDIO_DARK_ON_SURFACE_VARIANT : CARDIO_ON_SURFACE;
+  const outline = isDarkTheme ? CARDIO_DARK_OUTLINE : M3_LIGHT_OUTLINE;
+
+  const root = document.documentElement.style;
+  root.setProperty('--background', effectiveBackground);
+  root.setProperty('--surface', surface);
+  root.setProperty('--on-surface', onSurface);
+  root.setProperty('--on-surface-variant', onSurfaceVariant);
+  root.setProperty('--outline', outline);
+  root.setProperty('--accent', accentColor);
+  root.setProperty('--accent-topbar', topBarColor);
+  root.setProperty('--on-accent-topbar', contrastingTextColor(topBarColor));
+  // "primary" — фиксированный фирменный цвет (НЕ пересчитывается из палитры), см.
+  // MaterialTheme.colorScheme.primary в Theme.kt: используется рамкой поля в фокусе,
+  // чекбоксами, переключателями, выделением свотча палитры, текстом кнопок диалога.
+  root.setProperty('--primary', isDarkTheme ? CARDIO_DARK_PRIMARY : CARDIO_PRIMARY);
+  // "не требуется" — плашка/подпись/текст (см. NumberField в MainActivity.kt):
+  // фон плашки — onSurface@10%, рамка — outline@50%, подпись и текст — onSurfaceVariant@50%.
+  root.setProperty('--unneeded-tint', overAlpha(onSurface, 0.10, surface));
+  root.setProperty('--unneeded-outline', overAlpha(outline, 0.5, surface));
+  root.setProperty('--unneeded-label', overAlpha(onSurfaceVariant, 0.5, surface));
+  root.setProperty('--unneeded-text', overAlpha(onSurfaceVariant, 0.5, surface));
+  // Затенение переключателя "Пол", когда не нужен — surface@85% поверх иконок.
+  root.setProperty('--sex-unneeded-shade', overAlpha(surface, UNNEEDED_SHADE_ALPHA, surface));
+  document.body.style.background = effectiveBackground;
+
+  // ---- Видимость блоков/строк ----
+  el.patientBlock.hidden = !n.patientBlockNeeded;
+  el.labBlock.hidden = !n.labBlockNeeded;
+  el.killipBlock.hidden = !state.showGrace;
+  el.clinicalBlock.hidden = !n.clinicalSignsBlockNeeded;
+
+  el.ageSexRow.hidden = !n.ageSexRowNeeded;
+  el.heightWeightRow.hidden = !n.heightWeightRowNeeded;
+  el.hrSbpRow.hidden = !n.hrSbpRowNeeded;
+  el.creatHematRow.hidden = !n.creatinineHematocritRowNeeded;
+
+  el.graceChecks.hidden = !state.showGrace;
+  el.crusadeChecks.hidden = !state.showCrusade;
+
+  // Скруглённый верхний угол — у первого ВИДИМОГО блока ввода.
+  const headerOf = {
+    patient: el.patientBlock.querySelector('.subsection-header'),
+    lab: el.labBlock.querySelector('.subsection-header'),
+    killip: el.killipBlock.querySelector('.subsection-header'),
+    clinical: el.clinicalBlock.querySelector('.subsection-header')
+  };
+  Object.entries(headerOf).forEach(([key, headerEl]) => {
+    headerEl.classList.toggle('rounded-top', n.firstVisibleInputBlock === key);
+  });
+
+  // ---- Поля ввода: подписи (приглушение при !needed) + значения/disabled ----
+  el.ageFieldWrap.classList.toggle('unneeded', !n.ageNeeded);
+  el.heightFieldWrap.classList.toggle('unneeded', !n.heightNeeded);
+  el.weightFieldWrap.classList.toggle('unneeded', !n.weightNeeded);
+  el.hrFieldWrap.classList.toggle('unneeded', !n.heartRateNeeded);
+  el.sbpFieldWrap.classList.toggle('unneeded', !n.sbpNeeded);
+  el.creatinineFieldWrap.classList.toggle('unneeded', !n.creatinineNeeded);
+  el.hematocritFieldWrap.classList.toggle('unneeded', !n.hematocritNeeded);
+
+  setUnneededInput(el.ageInput, n.ageNeeded, state.age);
+  setUnneededInput(el.heightInput, n.heightNeeded, state.height);
+  setUnneededInput(el.weightInput, n.weightNeeded, state.weight);
+  setUnneededInput(el.hrInput, n.heartRateNeeded, state.heartRate);
+  setUnneededInput(el.sbpInput, n.sbpNeeded, state.sbp);
+  setUnneededInput(el.creatinineInput, n.creatinineNeeded, state.creatinine);
+  setUnneededInput(el.hematocritInput, n.hematocritNeeded, state.hematocrit);
+
+  // ---- Переключатель "Пол" (картинки + затенение, версия 18-19) ----
+  el.sexToggle.classList.toggle('unneeded', !n.sexNeeded);
+  const maleSelected = n.sexNeeded && state.sex === 'MALE';
+  const femaleSelected = n.sexNeeded && state.sex === 'FEMALE';
+  el.sexMaleIcon.src = `icons/sex/ic_sex_male_${maleSelected ? 'active' : 'inactive'}${isDarkTheme ? '_dark' : ''}.png`;
+  el.sexFemaleIcon.src = `icons/sex/ic_sex_female_${femaleSelected ? 'active' : 'inactive'}${isDarkTheme ? '_dark' : ''}.png`;
+
+  // ---- Killip select ----
+  if (el.killipSelect.dataset.built !== '1') {
+    KillipOrder.forEach((key) => {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = Killip[key].label;
+      el.killipSelect.appendChild(opt);
+    });
+    el.killipSelect.dataset.built = '1';
+  }
+  el.killipSelect.value = state.killip;
+
+  // ---- Чекбоксы ----
+  el.cardiacArrestInput.checked = state.cardiacArrest;
+  el.stDeviationInput.checked = state.stDeviation;
+  el.elevatedEnzymesInput.checked = state.elevatedEnzymes;
+  el.signsOfChfInput.checked = state.signsOfChf;
+  el.priorVascularDiseaseInput.checked = state.priorVascularDisease;
+  el.diabetesInput.checked = state.diabetes;
+
+  // ---- Результаты ----
+  el.bmiBlock.hidden = !state.showBmi;
+  el.gfrBlock.hidden = !state.showGfr;
+  el.crclBlock.hidden = !state.showCrCl;
+  el.graceBlock.hidden = !state.showGrace;
+  el.crusadeBlock.hidden = !state.showCrusade;
+
+  const age = toIntOrNull(state.age);
+  const height = toDoubleOrNull(state.height);
+  const weight = toDoubleOrNull(state.weight);
+  const creatinine = toDoubleOrNull(state.creatinine);
+  const heartRate = toIntOrNull(state.heartRate);
+  const sbp = toIntOrNull(state.sbp);
+  const hematocrit = toDoubleOrNull(state.hematocrit);
+  const sex = state.sex;
+
+  const creatinineClearance = (sex != null && age != null && weight != null && weight > 0 && creatinine != null && creatinine > 0)
+    ? cockcroftGault(sex, age, weight, creatinine) : null;
+
+  if (state.showBmi) {
+    const bmi = (height != null && height > 0 && weight != null && weight > 0) ? calculateBmi(weight, height) : null;
+    el.bmiValue.textContent = bmi ? bmi.value.toFixed(1) : '—';
+    el.bmiComments.innerHTML = '';
+    if (bmi) {
+      addComment(el.bmiComments, '*Единицы измерения: кг/м²');
+      addComment(el.bmiComments, `Категория: ${bmi.category}`);
+    } else {
+      addHint(el.bmiComments, 'рост, масса тела');
+    }
+  }
+
+  if (state.showGfr) {
+    const gfr = (sex != null && age != null && creatinine != null && creatinine > 0) ? ckdEpi2021(sex, age, creatinine) : null;
+    el.gfrValue.textContent = gfr != null ? gfr.toFixed(1) : '—';
+    el.gfrComments.innerHTML = '';
+    if (gfr != null) {
+      addComment(el.gfrComments, '*Единицы измерения: мл/мин/1.73м²');
+      addComment(el.gfrComments, `Стадия ХБП: ${ckdStage(gfr)}`);
+    } else {
+      addHint(el.gfrComments, 'возраст, пол, креатинин');
+    }
+  }
+
+  if (state.showCrCl) {
+    const crCl = creatinineClearance;
+    el.crclValue.textContent = crCl != null ? crCl.toFixed(1) : '—';
+    el.crclComments.innerHTML = '';
+    if (crCl != null) {
+      addComment(el.crclComments, '*Единицы измерения: мл/мин');
+      addComment(el.crclComments, `Стадия ХБП: ${ckdStage(crCl)}`);
+    } else {
+      addHint(el.crclComments, 'возраст, пол, масса тела, креатинин');
+    }
+  }
+
+  if (state.showGrace) {
+    const graceResult = (age != null && heartRate != null && sbp != null && creatinine != null && creatinine > 0)
+      ? graceScore({
+          age, heartRate, sbp, creatinineUmol: creatinine, killip: Killip[state.killip],
+          cardiacArrestAtAdmission: state.cardiacArrest, stDeviation: state.stDeviation, elevatedEnzymes: state.elevatedEnzymes
+        }) : null;
+    el.graceValue.textContent = graceResult ? String(graceResult.points) : '—';
+    el.graceComments.innerHTML = '';
+    if (graceResult) {
+      addComment(el.graceComments, '*Единицы измерения: баллы');
+      addComment(el.graceComments, `Категория риска: ${graceResult.riskCategory}`);
+      addComment(el.graceComments, `Тактика КАГ: ${graceResult.kagStrategy}, ${graceResult.kagTiming}`);
+    } else {
+      addHint(el.graceComments, 'возраст, ЧСС, АД сист., креатинин');
+    }
+  }
+
+  if (state.showCrusade) {
+    const crCl = creatinineClearance;
+    const crusadeResult = (sex != null && hematocrit != null && crCl != null && heartRate != null && sbp != null)
+      ? crusadeScore({
+          hematocrit, creatinineClearance: crCl, heartRate, sex,
+          signsOfChf: state.signsOfChf, priorVascularDisease: state.priorVascularDisease, diabetes: state.diabetes, sbp
+        }) : null;
+    el.crusadeValue.textContent = crusadeResult ? String(crusadeResult.points) : '—';
+    el.crusadeComments.innerHTML = '';
+    if (crusadeResult) {
+      addComment(el.crusadeComments, '*Единицы измерения: баллы');
+      addComment(el.crusadeComments, `Категория риска кровотечения: ${crusadeResult.riskCategory}`);
+      addComment(el.crusadeComments, `Риск крупного кровотечения: ${crusadeResult.bleedingRiskPercent}`);
+    } else {
+      addHint(el.crusadeComments, 'гематокрит, ЧСС, АД сист. и данные для расчёта клиренса креатинина (возраст, пол, масса, креатинин)');
+    }
+  }
+
+  saveThemePrefs(backgroundColor, isDarkTheme);
+}
+
+function addComment(container, text) {
+  const p = document.createElement('p');
+  p.className = 'result-comment';
+  p.textContent = text;
+  container.appendChild(p);
+}
+function addHint(container, fields) {
+  const p = document.createElement('p');
+  p.className = 'missing-hint';
+  p.textContent = `Заполните: ${fields}`;
+  container.appendChild(p);
+}
+
+// ===================== Обработчики ввода =====================
+function bindTextInput(inputEl, stateKey) {
+  inputEl.addEventListener('input', () => {
+    state[stateKey] = inputEl.value;
+    render();
+  });
+}
+bindTextInput(el.ageInput, 'age');
+bindTextInput(el.heightInput, 'height');
+bindTextInput(el.weightInput, 'weight');
+bindTextInput(el.hrInput, 'heartRate');
+bindTextInput(el.sbpInput, 'sbp');
+bindTextInput(el.creatinineInput, 'creatinine');
+bindTextInput(el.hematocritInput, 'hematocrit');
+
+el.sexMale.addEventListener('click', () => {
+  if (!needsFlags().sexNeeded) return;
+  state.sex = 'MALE';
+  render();
+});
+el.sexFemale.addEventListener('click', () => {
+  if (!needsFlags().sexNeeded) return;
+  state.sex = 'FEMALE';
+  render();
+});
+
+el.killipSelect.addEventListener('change', () => {
+  state.killip = el.killipSelect.value;
+  render();
+});
+
+function bindCheckbox(inputEl, stateKey) {
+  inputEl.addEventListener('change', () => {
+    state[stateKey] = inputEl.checked;
+    render();
+  });
+}
+bindCheckbox(el.cardiacArrestInput, 'cardiacArrest');
+bindCheckbox(el.stDeviationInput, 'stDeviation');
+bindCheckbox(el.elevatedEnzymesInput, 'elevatedEnzymes');
+bindCheckbox(el.signsOfChfInput, 'signsOfChf');
+bindCheckbox(el.priorVascularDiseaseInput, 'priorVascularDisease');
+bindCheckbox(el.diabetesInput, 'diabetes');
+
+// ---- Сброс данных пациента (кнопка в заголовке "Пациент") ----
+el.resetPatientButton.addEventListener('click', () => {
+  state.age = ''; state.height = ''; state.weight = ''; state.sex = null;
+  state.creatinine = ''; state.heartRate = ''; state.sbp = ''; state.hematocrit = '';
+  state.cardiacArrest = false; state.stDeviation = false; state.elevatedEnzymes = false; state.killip = 'I';
+  state.signsOfChf = false; state.priorVascularDisease = false; state.diabetes = false;
+  render();
+});
+
+// ===================== Меню (три черты) =====================
+function closeMenu() {
+  el.menuDropdown.hidden = true;
+  el.menuButton.setAttribute('aria-expanded', 'false');
+}
+el.menuButton.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const willOpen = el.menuDropdown.hidden;
+  el.menuDropdown.hidden = !willOpen;
+  el.menuButton.setAttribute('aria-expanded', String(willOpen));
+});
+document.addEventListener('click', (e) => {
+  if (!el.menuDropdown.hidden && !el.menuDropdown.contains(e.target) && e.target !== el.menuButton) {
+    closeMenu();
+  }
+});
+el.menuDropdown.querySelectorAll('button[data-action]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const action = btn.dataset.action;
+    closeMenu();
+    if (action === 'open-theme') openThemeDialog();
+    else if (action === 'open-formulas') openFormulasDialog();
+    else if (action === 'open-about') openAboutDialog();
+  });
+});
+
+// ===================== Диалог "Тема" =====================
+let pendingBackground = backgroundColor;
+let pendingDark = isDarkTheme;
 function openThemeDialog() {
-  pendingBackground = themeState.background;
-  pendingDark = themeState.dark;
-  darkThemeSwitch.checked = pendingDark;
-  paletteEl.classList.toggle('disabled', pendingDark);
-  updatePaletteSelection();
-  themeDialogOverlay.hidden = false;
+  pendingBackground = backgroundColor;
+  pendingDark = isDarkTheme;
+  el.darkThemeSwitch.checked = pendingDark;
+  [...el.palette.children].forEach((c) => c.classList.toggle('selected', c.dataset.color === pendingBackground));
+  el.themeDialogOverlay.hidden = false;
 }
-darkThemeSwitch.addEventListener('change', () => {
-  pendingDark = darkThemeSwitch.checked;
-  paletteEl.classList.toggle('disabled', pendingDark);
+el.darkThemeSwitch.addEventListener('change', () => { pendingDark = el.darkThemeSwitch.checked; });
+el.themeDialogOverlay.querySelector('[data-action="cancel-theme"]').addEventListener('click', () => {
+  el.themeDialogOverlay.hidden = true;
 });
-themeDialogOverlay.querySelector('[data-action="cancel-theme"]').addEventListener('click', () => {
-  themeDialogOverlay.hidden = true;
-});
-themeDialogOverlay.querySelector('[data-action="confirm-theme"]').addEventListener('click', () => {
-  themeState = { background: pendingBackground, dark: pendingDark };
-  applyTheme();
-  renderResults();
-  themeDialogOverlay.hidden = true;
+el.themeDialogOverlay.querySelector('[data-action="confirm-theme"]').addEventListener('click', () => {
+  isDarkTheme = pendingDark;
+  backgroundColor = pendingBackground;
+  el.themeDialogOverlay.hidden = true;
+  render();
 });
 
-// ---------- Диалог "Формулы" ----------
-
-const formulasDialogOverlay = document.getElementById('formulasDialogOverlay');
-function bindFormulaToggle(id, key) {
-  document.getElementById(id).addEventListener('change', (e) => {
-    state.visibility[key] = e.target.checked;
-    // Как только GRACE/CRUSADE выключается — сбрасываются пункты, которые нужны
-    // только ей (версия 17, Android): класс Killip и соответствующие галочки.
-    if (key === 'grace' && !e.target.checked) {
-      state.cardiacArrest = false; state.stDeviation = false; state.elevatedEnzymes = false;
-      document.getElementById('cardiacArrestInput').checked = false;
-      document.getElementById('stDeviationInput').checked = false;
-      document.getElementById('elevatedEnzymesInput').checked = false;
-      state.killip = Killip.I;
-      killipSelect.value = Killip.I.key;
-    }
-    if (key === 'crusade' && !e.target.checked) {
-      state.signsOfChf = false; state.priorVascularDisease = false; state.diabetes = false;
-      document.getElementById('signsOfChfInput').checked = false;
-      document.getElementById('priorVascularDiseaseInput').checked = false;
-      document.getElementById('diabetesInput').checked = false;
-    }
-    renderResults();
+// ===================== Диалог "Формулы" =====================
+function openFormulasDialog() {
+  el.toggleBmi.checked = state.showBmi;
+  el.toggleGfr.checked = state.showGfr;
+  el.toggleCrCl.checked = state.showCrCl;
+  el.toggleGrace.checked = state.showGrace;
+  el.toggleCrusade.checked = state.showCrusade;
+  el.formulasDialogOverlay.hidden = false;
+}
+function bindFormulaToggle(inputEl, stateKey) {
+  inputEl.addEventListener('change', () => {
+    state[stateKey] = inputEl.checked;
+    render();
   });
 }
-bindFormulaToggle('toggleBmi', 'bmi');
-bindFormulaToggle('toggleGfr', 'gfr');
-bindFormulaToggle('toggleCrCl', 'crCl');
-bindFormulaToggle('toggleGrace', 'grace');
-bindFormulaToggle('toggleCrusade', 'crusade');
-formulasDialogOverlay.querySelector('[data-action="close-formulas"]').addEventListener('click', () => {
-  formulasDialogOverlay.hidden = true;
+bindFormulaToggle(el.toggleBmi, 'showBmi');
+bindFormulaToggle(el.toggleGfr, 'showGfr');
+bindFormulaToggle(el.toggleCrCl, 'showCrCl');
+bindFormulaToggle(el.toggleGrace, 'showGrace');
+bindFormulaToggle(el.toggleCrusade, 'showCrusade');
+el.formulasDialogOverlay.querySelector('[data-action="close-formulas"]').addEventListener('click', () => {
+  el.formulasDialogOverlay.hidden = true;
 });
 
-// ---------- Диалог "О программе" ----------
-
-const aboutDialogOverlay = document.getElementById('aboutDialogOverlay');
-aboutDialogOverlay.querySelector('[data-action="close-about"]').addEventListener('click', () => {
-  aboutDialogOverlay.hidden = true;
+// ===================== Диалог "О программе" =====================
+function openAboutDialog() { el.aboutDialogOverlay.hidden = false; }
+el.aboutDialogOverlay.querySelector('[data-action="close-about"]').addEventListener('click', () => {
+  el.aboutDialogOverlay.hidden = true;
 });
 
-// Клик по overlay (вне диалога) закрывает его
-[themeDialogOverlay, formulasDialogOverlay, aboutDialogOverlay].forEach((overlay) => {
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) overlay.hidden = true;
-  });
-});
-
-// ---------- Инициализация ----------
-
-applyTheme();
-renderResults();
-
-// Регистрация service worker (офлайн-режим PWA), если доступно.
+// ===================== Service worker (PWA) =====================
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => { /* необязательно */ });
+    navigator.serviceWorker.register('sw.js').catch(() => { /* офлайн-кеш необязателен */ });
   });
 }
+
+// ===================== Первый рендер =====================
+render();

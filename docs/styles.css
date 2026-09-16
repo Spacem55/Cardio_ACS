@@ -1,32 +1,28 @@
+/* Кардио-калькулятор ОКС — веб-версия (v2.0, "с нуля").
+   Цветовые переменные (--background, --surface, --on-surface, --on-surface-variant,
+   --outline, --accent, --accent-topbar, --on-accent-topbar, --unneeded-*) выставляются
+   ДИНАМИЧЕСКИ из app.js при каждом рендере (см. render()) — они зависят от выбранного
+   цвета фона (палитра) и тёмной темы, поэтому здесь заданы только безопасные
+   значения по умолчанию на случай, если скрипт ещё не отработал. */
 :root {
-  --primary: #3A75C4;
   --background: #AECEF9;
   --surface: #FFFFFF;
   --on-surface: #1B1B1B;
-  --on-surface-variant: #5B5B5B;
-  --outline: #C9C9C9;
+  --on-surface-variant: #1B1B1B;
+  --outline: #79747E;
   --accent: #3A75C4;
-  --on-accent: #FFFFFF;
-  --male-color: #3A75C4;
-  --female-color: #E0529C;
-  /* "не требуется" (версия 21-23 Android): фон плашки — onSurface@10%, подпись поля — onSurfaceVariant@50%, текст плашки — onSurfaceVariant@70% */
+  --accent-topbar: #3A75C4;
+  --on-accent-topbar: #FFFFFF;
+  /* "primary" — ФИКСИРОВАННЫЙ фирменный цвет (CardioPrimary/CardioDarkPrimary), НЕ
+     пересчитывается из выбранной палитры (в отличие от --accent выше). Используется
+     Material3-компонентами по умолчанию: рамка поля в фокусе, чекбоксы, переключатели,
+     выделение свотча палитры, текст кнопок диалога. */
+  --primary: #3A75C4;
   --unneeded-tint: rgba(27, 27, 27, 0.10);
-  --unneeded-label: rgba(91, 91, 91, 0.5);
-  --unneeded-text: rgba(91, 91, 91, 0.7);
-  --unneeded-outline: rgba(201, 201, 201, 0.5);
-}
-
-[data-dark="true"] {
-  --background: #1A1A1A;
-  --surface: #262626;
-  --on-surface: #E8E8E8;
-  --on-surface-variant: #B0B0B0;
-  --outline: #4A4A4A;
-  --primary: #6FA8DC;
-  --unneeded-tint: rgba(232, 232, 232, 0.10);
-  --unneeded-label: rgba(176, 176, 176, 0.5);
-  --unneeded-text: rgba(176, 176, 176, 0.7);
-  --unneeded-outline: rgba(74, 74, 74, 0.5);
+  --unneeded-outline: rgba(121, 116, 126, 0.5);
+  --unneeded-label: rgba(27, 27, 27, 0.5);
+  --unneeded-text: rgba(27, 27, 27, 0.5);
+  --sex-unneeded-shade: rgba(255, 255, 255, 0.85);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -48,7 +44,7 @@ html, body {
   background: var(--background);
 }
 
-/* ---- Заголовок ---- */
+/* ---- Заголовок (topBarColor = accentColor, тонированный в тёмной теме) ---- */
 #titleBar {
   position: sticky;
   top: 0;
@@ -56,7 +52,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--accent);
+  background: var(--accent-topbar);
   padding: calc(6px + env(safe-area-inset-top)) 16px 6px 16px;
   min-height: 40px;
 }
@@ -64,9 +60,9 @@ html, body {
 #titleText {
   flex: 1;
   text-align: center;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
-  color: var(--on-accent);
+  color: var(--on-accent-topbar);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -80,7 +76,7 @@ html, body {
   height: 36px;
   border: none;
   background: transparent;
-  color: var(--on-accent);
+  color: var(--on-accent-topbar);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -130,9 +126,11 @@ html, body {
   box-shadow: 0 1px 3px rgba(0,0,0,0.12);
 }
 
+/* Заголовок подраздела — тонированная плашка accentColor@14% (БЕЗ тёмной тонировки —
+   в отличие от верхней полосы/полосы "Результаты", см. SubsectionHeader в MainActivity.kt). */
 .subsection-header {
   margin: 0;
-  font-size: 19px;
+  font-size: 21px;
   font-weight: 700;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -164,11 +162,13 @@ html, body {
 }
 .result-header span:last-child { text-align: right; }
 
+/* Полоса "Результаты" — сплошной accentColor, тонированный в тёмной теме (тот же цвет,
+   что и верхняя полоса). Размер шрифта: titleLarge(22sp) * 1.3 * resultsBannerFontScaleFixed(1.2) ≈ 34px. */
 .results-banner {
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--accent-topbar);
+  color: var(--on-accent-topbar);
   text-align: center;
-  font-size: 22px;
+  font-size: 34px;
   font-weight: 700;
   padding: 12px 16px;
 }
@@ -216,7 +216,8 @@ html, body {
 .field-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .field-input[type=number] { -moz-appearance: textfield; }
 
-/* "не требуется" (версия 21-23, Android): поле не нужно ни одной включённой шкале */
+/* "не требуется" (порт NumberField при needed=false, версия 21-23 Android):
+   фон плашки — onSurface@10%, рамка — outline@50%, подпись и текст — onSurfaceVariant@50%. */
 .field-wrap.unneeded .field-label { color: var(--unneeded-label); }
 .field-input.unneeded {
   background: var(--unneeded-tint);
@@ -228,27 +229,32 @@ html, body {
 .field-input.unneeded::placeholder { color: var(--unneeded-text); opacity: 1; }
 .field-input.unneeded:focus { border-color: var(--unneeded-outline); border-width: 1px; padding: 14px 12px; }
 
-.sex-toggle { display: flex; gap: 8px; }
+/* Порт SexToggle/SexToggleButton: сами иконки (картинки, без рамки/фона на кнопке) —
+   выбор показывается тем, какая картинка (active/inactive) отрисована. */
+.sex-toggle { position: relative; display: flex; gap: 8px; }
 .sex-btn {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  border-radius: 10px;
-  border: 1px solid var(--outline);
-  background: var(--surface);
-  color: var(--on-surface-variant);
+  border: none;
+  background: none;
   cursor: pointer;
-  padding: 0 8px;
+  padding: 4px;
 }
-.sex-symbol { font-size: 24px; font-weight: 700; }
-.sex-label { font-weight: 500; }
-.sex-btn.active[data-sex="MALE"] { border: 2px solid var(--male-color); color: var(--male-color); }
-.sex-btn.active[data-sex="FEMALE"] { border: 2px solid var(--female-color); color: var(--female-color); }
+.sex-icon { width: 70%; max-width: 64px; height: auto; display: block; }
 
-/* "не требуется" для переключателя пола — только затенение, без подписи (версия 21, Android) */
-.sex-toggle.unneeded { opacity: 0.4; pointer-events: none; }
+/* "не требуется" для переключателя пола (версия 19, MaybeUnneededField): иконки сами
+   переключаются на inactive (см. app.js), плюс полупрозрачная плашка surface@85%
+   поверх них, без какой-либо надписи, без реакции на клик. */
+.sex-toggle.unneeded { pointer-events: none; }
+.sex-toggle.unneeded::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  background: var(--sex-unneeded-shade);
+}
 
 .select-wrap { position: relative; }
 .field-select { appearance: none; padding-right: 36px; cursor: pointer; }
@@ -261,6 +267,7 @@ html, body {
   align-items: center;
   gap: 10px;
   font-size: 15px;
+  line-height: 1.2;
   cursor: pointer;
 }
 .checkbox-row input[type="checkbox"] {
@@ -271,7 +278,7 @@ html, body {
 }
 
 .result-comment, .missing-hint {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--on-surface-variant);
   margin: 0;
 }
@@ -337,7 +344,6 @@ html, body {
 .switch input:checked + .slider::before { transform: translateX(18px); }
 
 #paletteLabel { font-weight: 500; }
-#palette.disabled { opacity: 0.4; pointer-events: none; }
 #palette {
   display: flex;
   flex-wrap: wrap;

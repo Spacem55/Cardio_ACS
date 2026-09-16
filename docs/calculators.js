@@ -1,31 +1,31 @@
-// Чистая логика расчётов — прямой порт Calculators.kt (без UI-зависимостей).
-// Формулы и таблицы баллов взяты из тех же публикаций, что и в Android-версии:
+// Прямой JS-порт Calculators.kt (v2.0, "с нуля") — чистая логика расчётов, без UI.
+// Источники формул и таблиц баллов — см. комментарий в Calculators.kt:
 //  - CKD-EPI 2021 (без поправки на расу): Inker LA, et al. N Engl J Med. 2021.
 //  - Кокрофт-Голт: Cockcroft DW, Gault MH. Nephron. 1976.
 //  - Классификация ХБП (KDIGO 2012) по СКФ.
-//  - GRACE (классическая 8-факторная шкала): Granger CB, et al. Arch Intern Med. 2003;
-//    таймингы КАГ — ESC NSTE-ACS Guidelines 2020.
+//  - GRACE (классическая 8-факторная шкала внутригоспитальной летальности):
+//    Granger CB, et al. Arch Intern Med. 2003; таймингы КАГ — ESC NSTE-ACS Guidelines 2020.
 //  - CRUSADE: Subherwal S, et al. Circulation. 2009.
 
 const Sex = { MALE: 'MALE', FEMALE: 'FEMALE' };
 
 const Killip = {
-  I: { key: 'I', label: 'I — без признаков СН', points: 0 },
-  II: { key: 'II', label: 'II — влажные хрипы, ритм галопа (S3)', points: 20 },
+  I:   { key: 'I',   label: 'I — без признаков СН', points: 0 },
+  II:  { key: 'II',  label: 'II — влажные хрипы, ритм галопа (S3)', points: 20 },
   III: { key: 'III', label: 'III — отёк лёгких', points: 39 },
-  IV: { key: 'IV', label: 'IV — кардиогенный шок', points: 59 },
+  IV:  { key: 'IV',  label: 'IV — кардиогенный шок', points: 59 }
 };
-const KillipOrder = [Killip.I, Killip.II, Killip.III, Killip.IV];
+const KillipOrder = ['I', 'II', 'III', 'IV'];
 
 // ---------- СКФ: CKD-EPI 2021 (race-free) ----------
-
-/** Возвращает СКФ в мл/мин/1.73м². creatinineUmol — креатинин в мкмоль/л. */
 function ckdEpi2021(sex, age, creatinineUmol) {
   const scrMgDl = creatinineUmol / 88.4;
-  const isFemale = sex === Sex.FEMALE;
-  const kappa = isFemale ? 0.7 : 0.9;
-  const alpha = isFemale ? -0.241 : -0.302;
-  const sexFactor = isFemale ? 1.012 : 1.0;
+  let kappa, alpha, sexFactor;
+  if (sex === Sex.FEMALE) {
+    kappa = 0.7; alpha = -0.241; sexFactor = 1.012;
+  } else {
+    kappa = 0.9; alpha = -0.302; sexFactor = 1.0;
+  }
   const minRatio = Math.min(scrMgDl / kappa, 1.0);
   const maxRatio = Math.max(scrMgDl / kappa, 1.0);
   const exponent = -1.200;
@@ -37,8 +37,6 @@ function ckdEpi2021(sex, age, creatinineUmol) {
 }
 
 // ---------- Клиренс креатинина: формула Кокрофта-Голта ----------
-
-/** Возвращает клиренс креатинина в мл/мин. weightKg — фактическая масса тела. */
 function cockcroftGault(sex, age, weightKg, creatinineUmol) {
   const constant = sex === Sex.FEMALE ? 1.04 : 1.23;
   return ((140 - age) * weightKg * constant) / creatinineUmol;
@@ -54,9 +52,7 @@ function ckdStage(gfr) {
   return 'C5 (терминальная почечная недостаточность)';
 }
 
-// ---------- ИМТ ----------
-
-/** heightCm — рост в см, weightKg — масса тела в кг. Возвращает {value, category}. */
+// ---------- ИМТ (индекс массы тела) ----------
 function calculateBmi(weightKg, heightCm) {
   const heightM = heightCm / 100.0;
   const bmi = weightKg / (heightM * heightM);
@@ -71,7 +67,6 @@ function calculateBmi(weightKg, heightCm) {
 }
 
 // ---------- Шкала GRACE ----------
-
 function graceAgePoints(age) {
   if (age < 30) return 0;
   if (age <= 39) return 8;
@@ -82,7 +77,6 @@ function graceAgePoints(age) {
   if (age <= 89) return 91;
   return 100;
 }
-
 function graceHeartRatePoints(hr) {
   if (hr < 50) return 0;
   if (hr <= 69) return 3;
@@ -92,7 +86,6 @@ function graceHeartRatePoints(hr) {
   if (hr <= 199) return 38;
   return 46;
 }
-
 function graceSbpPoints(sbp) {
   if (sbp < 80) return 58;
   if (sbp <= 99) return 53;
@@ -102,7 +95,6 @@ function graceSbpPoints(sbp) {
   if (sbp <= 199) return 10;
   return 0;
 }
-
 function graceCreatininePoints(creatinineUmol) {
   const mgDl = creatinineUmol / 88.4;
   if (mgDl < 0.40) return 1;
@@ -113,11 +105,6 @@ function graceCreatininePoints(creatinineUmol) {
   if (mgDl < 4.00) return 21;
   return 28;
 }
-
-/**
- * Возвращает {points, riskCategory, kagStrategy, kagTiming}.
- * killip — один из объектов Killip.*
- */
 function graceScore({ age, heartRate, sbp, creatinineUmol, killip, cardiacArrestAtAdmission, stDeviation, elevatedEnzymes }) {
   const points = graceAgePoints(age) +
     graceHeartRatePoints(heartRate) +
@@ -130,23 +117,16 @@ function graceScore({ age, heartRate, sbp, creatinineUmol, killip, cardiacArrest
 
   let riskCategory, kagStrategy, kagTiming;
   if (points > 140) {
-    riskCategory = 'Высокий риск';
-    kagStrategy = 'Экстренная инвазивная стратегия';
-    kagTiming = 'КАГ < 24 ч';
+    riskCategory = 'Высокий риск'; kagStrategy = 'Экстр. инвазивная стратегия'; kagTiming = 'КАГ < 24 ч';
   } else if (points >= 109) {
-    riskCategory = 'Промежуточный риск';
-    kagStrategy = 'Ранняя инвазивная стратегия';
-    kagTiming = 'КАГ < 72 ч';
+    riskCategory = 'Промежут. риск'; kagStrategy = 'Ранняя инваз. стратегия'; kagTiming = 'КАГ < 72 ч';
   } else {
-    riskCategory = 'Низкий риск';
-    kagStrategy = 'Селективная инвазивная стратегия';
-    kagTiming = 'по клиническим показаниям';
+    riskCategory = 'Низкий риск'; kagStrategy = 'Селективная инваз. стратегия'; kagTiming = 'по клиническим показаниям';
   }
   return { points, riskCategory, kagStrategy, kagTiming };
 }
 
 // ---------- Шкала CRUSADE ----------
-
 function crusadeHematocritPoints(hct) {
   if (hct < 31.0) return 9;
   if (hct < 34.0) return 7;
@@ -154,7 +134,6 @@ function crusadeHematocritPoints(hct) {
   if (hct < 40.0) return 2;
   return 0;
 }
-
 function crusadeCrClPoints(crCl) {
   if (crCl <= 15.0) return 39;
   if (crCl <= 30.0) return 35;
@@ -163,7 +142,6 @@ function crusadeCrClPoints(crCl) {
   if (crCl <= 120.0) return 7;
   return 0;
 }
-
 function crusadeHeartRatePoints(hr) {
   if (hr <= 70) return 0;
   if (hr <= 80) return 1;
@@ -173,7 +151,6 @@ function crusadeHeartRatePoints(hr) {
   if (hr <= 120) return 10;
   return 11;
 }
-
 function crusadeSbpPoints(sbp) {
   if (sbp <= 90) return 10;
   if (sbp <= 100) return 8;
@@ -182,8 +159,6 @@ function crusadeSbpPoints(sbp) {
   if (sbp <= 200) return 3;
   return 5;
 }
-
-/** Возвращает {points, riskCategory, bleedingRiskPercent}. */
 function crusadeScore({ hematocrit, creatinineClearance, heartRate, sex, signsOfChf, priorVascularDisease, diabetes, sbp }) {
   const points = crusadeHematocritPoints(hematocrit) +
     crusadeCrClPoints(creatinineClearance) +
@@ -195,9 +170,9 @@ function crusadeScore({ hematocrit, creatinineClearance, heartRate, sex, signsOf
     crusadeSbpPoints(sbp);
 
   let riskCategory, bleedingRiskPercent;
-  if (points <= 20) { riskCategory = 'Очень низкий'; bleedingRiskPercent = '≈ 3.1%'; }
+  if (points <= 20) { riskCategory = 'Оч. низкий'; bleedingRiskPercent = '≈ 3.1%'; }
   else if (points <= 30) { riskCategory = 'Низкий'; bleedingRiskPercent = '≈ 5.5%'; }
-  else if (points <= 40) { riskCategory = 'Умеренный'; bleedingRiskPercent = '≈ 8.6%'; }
+  else if (points <= 40) { riskCategory = 'Умерен.'; bleedingRiskPercent = '≈ 8.6%'; }
   else if (points <= 50) { riskCategory = 'Высокий'; bleedingRiskPercent = '≈ 11.9%'; }
   else { riskCategory = 'Очень высокий'; bleedingRiskPercent = '≈ 19.5%'; }
   return { points, riskCategory, bleedingRiskPercent };
