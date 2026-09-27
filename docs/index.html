@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
-<title>Кардио-калькулятор ОКС</title>
+<title>Кардио-калькулятор</title>
 <meta name="description" content="Определяет тактику ведения пациента по результатам расчёта клинических шкал">
 <meta name="theme-color" content="#3A75C4">
 <link rel="manifest" href="manifest.webmanifest">
@@ -11,159 +11,260 @@
 <link rel="icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Кардио ОКС">
+<meta name="apple-mobile-web-app-title" content="Кардио">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
 <div id="app">
-  <!-- Заголовок -->
-  <header id="titleBar">
-    <span id="titleText">Кардио-калькулятор ОКС</span>
-    <button id="menuButton" aria-label="Меню" aria-haspopup="true" aria-expanded="false">
-      <svg viewBox="0 0 24 24" width="22" height="22"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-    </button>
-    <div id="menuDropdown" class="dropdown" hidden>
-      <button data-action="open-theme">Тема</button>
-      <button data-action="open-formulas">Формулы</button>
-      <button data-action="open-about">О программе</button>
+  <!-- Заголовок + переключатель вкладок — закреплены сверху (не прокручиваются),
+       как и на Android (шапка и полоса вкладок вынесены за пределы прокручиваемой области). -->
+  <div id="topBar">
+    <header id="titleBar">
+      <span id="titleText">Кардио-калькулятор</span>
+      <button id="menuButton" aria-label="Меню" aria-haspopup="true" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <div id="menuDropdown" class="dropdown" hidden>
+        <button data-action="open-theme">Тема</button>
+        <button data-action="open-formulas">Формулы</button>
+        <button data-action="share">Поделиться</button>
+        <button data-action="open-about">О программе</button>
+      </div>
+    </header>
+
+    <!-- Переключатель вкладок "ОКС" / "ФП" -->
+    <div id="tabBarWrap">
+      <div class="tab-bar" id="tabBar">
+        <button class="tab-btn active" id="tabOks" data-tab="oks" type="button">
+          <span class="tab-label" id="tabOksLabel">Основные шкалы</span>
+        </button>
+        <button class="tab-btn" id="tabAfib" data-tab="afib" type="button">
+          <span class="tab-label" id="tabAfibLabel">CHA2DS2-VASC / HAS-BLED</span>
+        </button>
+      </div>
     </div>
-  </header>
+  </div>
 
   <!-- Прокручиваемое содержимое -->
   <main id="content">
 
-    <!-- Блок ввода данных -->
-    <section class="card" id="inputCard">
-      <div id="patientBlock">
-        <h2 class="subsection-header header-row">
-          <span>Пациент</span>
-          <button type="button" class="icon-btn" id="resetPatientButton" aria-label="Сбросить все данные" title="Сбросить все данные">
-            <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" fill="currentColor"/></svg>
-          </button>
-        </h2>
-        <div class="subsection-body">
-          <div class="row" id="ageSexRow">
-            <div class="field-wrap grow" id="ageFieldWrap">
-              <label class="field-label" for="ageInput">Возраст, лет</label>
-              <input class="field-input" id="ageInput" type="number" inputmode="numeric" pattern="[0-9]*">
-            </div>
-            <div class="sex-toggle grow" id="sexToggle">
-              <button class="sex-btn" id="sexMale" data-sex="MALE" type="button">
-                <img class="sex-icon" id="sexMaleIcon" alt="Муж">
-              </button>
-              <button class="sex-btn" id="sexFemale" data-sex="FEMALE" type="button">
-                <img class="sex-icon" id="sexFemaleIcon" alt="Жен">
-              </button>
-            </div>
-          </div>
-          <div class="row" id="heightWeightRow">
-            <div class="field-wrap grow" id="heightFieldWrap">
-              <label class="field-label" for="heightInput">Рост, см</label>
-              <input class="field-input" id="heightInput" type="number" inputmode="numeric" pattern="[0-9]*">
-            </div>
-            <div class="field-wrap grow" id="weightFieldWrap">
-              <label class="field-label" for="weightInput">Масса тела, кг</label>
-              <input class="field-input" id="weightInput" type="number" inputmode="decimal" step="any">
-            </div>
-          </div>
-        </div>
-      </div>
+    <!-- ===================== Страница "ОКС" ===================== -->
+    <div id="pageOks" class="page">
 
-      <div id="labBlock">
-        <h2 class="subsection-header">Лабораторные и витальные показатели</h2>
-        <div class="subsection-body">
-          <div class="row" id="hrSbpRow">
-            <div class="field-wrap grow" id="hrFieldWrap">
-              <label class="field-label" for="hrInput">ЧСС, уд/мин</label>
-              <input class="field-input" id="hrInput" type="number" inputmode="numeric" pattern="[0-9]*">
+      <section class="card" id="inputCard">
+        <div id="patientBlock">
+          <h2 class="subsection-header header-row">
+            <span>Пациент</span>
+            <button type="button" class="icon-btn reset-btn" aria-label="Сбросить все данные" title="Сбросить все данные">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" fill="currentColor"/></svg>
+            </button>
+          </h2>
+          <div class="subsection-body">
+            <div class="row" id="ageSexRow">
+              <div class="field-wrap grow" id="ageFieldWrap">
+                <label class="field-label" for="ageInput">Возраст, лет</label>
+                <input class="field-input" id="ageInput" type="number" inputmode="numeric" pattern="[0-9]*">
+              </div>
+              <div class="sex-toggle grow" id="sexToggle">
+                <button class="sex-btn" id="sexMale" data-sex="MALE" type="button">
+                  <img class="sex-icon" id="sexMaleIcon" alt="Муж">
+                </button>
+                <button class="sex-btn" id="sexFemale" data-sex="FEMALE" type="button">
+                  <img class="sex-icon" id="sexFemaleIcon" alt="Жен">
+                </button>
+              </div>
             </div>
-            <div class="field-wrap grow" id="sbpFieldWrap">
-              <label class="field-label" for="sbpInput">АД сист. мм рт.ст.</label>
-              <input class="field-input" id="sbpInput" type="number" inputmode="numeric" pattern="[0-9]*">
-            </div>
-          </div>
-          <div class="row" id="creatHematRow">
-            <div class="field-wrap grow" id="creatinineFieldWrap">
-              <label class="field-label" for="creatinineInput">Креатинин, мкмоль/л</label>
-              <input class="field-input" id="creatinineInput" type="number" inputmode="decimal" step="any">
-            </div>
-            <div class="field-wrap grow" id="hematocritFieldWrap">
-              <label class="field-label" for="hematocritInput">Гематокрит,%</label>
-              <input class="field-input" id="hematocritInput" type="number" inputmode="decimal" step="any">
+            <div class="row" id="heightWeightRow">
+              <div class="field-wrap grow" id="heightFieldWrap">
+                <label class="field-label" for="heightInput">Рост, см</label>
+                <input class="field-input" id="heightInput" type="number" inputmode="numeric" pattern="[0-9]*">
+              </div>
+              <div class="field-wrap grow" id="weightFieldWrap">
+                <label class="field-label" for="weightInput">Масса тела, кг</label>
+                <input class="field-input" id="weightInput" type="number" inputmode="decimal" step="any">
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div id="killipBlock">
-        <h2 class="subsection-header">Класс ОСН (Killip)</h2>
-        <div class="subsection-body">
-          <div class="select-wrap">
-            <select id="killipSelect" class="field-select"></select>
-            <svg class="select-arrow" viewBox="0 0 24 24" width="20" height="20"><path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div id="labBlock">
+          <h2 class="subsection-header">Лабораторные и витальные показатели</h2>
+          <div class="subsection-body">
+            <div class="row" id="hrSbpRow">
+              <div class="field-wrap grow" id="hrFieldWrap">
+                <label class="field-label" for="hrInput">ЧСС, уд/мин</label>
+                <input class="field-input" id="hrInput" type="number" inputmode="numeric" pattern="[0-9]*">
+              </div>
+              <div class="field-wrap grow" id="sbpFieldWrap">
+                <label class="field-label" for="sbpInput">АД сист. мм рт.ст.</label>
+                <input class="field-input" id="sbpInput" type="number" inputmode="numeric" pattern="[0-9]*">
+              </div>
+            </div>
+            <div class="row" id="creatHematRow">
+              <div class="field-wrap grow" id="creatinineFieldWrap">
+                <label class="field-label" for="creatinineInput">Креатинин, мкмоль/л</label>
+                <input class="field-input" id="creatinineInput" type="number" inputmode="decimal" step="any">
+              </div>
+              <div class="field-wrap grow" id="hematocritFieldWrap">
+                <label class="field-label" for="hematocritInput">Гематокрит,%</label>
+                <input class="field-input" id="hematocritInput" type="number" inputmode="decimal" step="any">
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div id="clinicalBlock">
-        <h2 class="subsection-header">Клинические признаки</h2>
-        <div class="subsection-body">
-          <div id="graceChecks">
-            <label class="checkbox-row"><input type="checkbox" id="cardiacArrestInput"><span>Остановка сердца при поступлении</span></label>
-            <label class="checkbox-row"><input type="checkbox" id="stDeviationInput"><span>Отклонение сегмента ST на ЭКГ</span></label>
-            <label class="checkbox-row"><input type="checkbox" id="elevatedEnzymesInput"><span>Высокий уровень сердечных ферментов</span></label>
-          </div>
-          <div id="crusadeChecks">
-            <label class="checkbox-row"><input type="checkbox" id="signsOfChfInput"><span>Признаки ХСН при поступлении</span></label>
-            <label class="checkbox-row"><input type="checkbox" id="priorVascularDiseaseInput"><span>Предшествующее сосудистое заболевание (периферический атеросклероз или ОНМК)</span></label>
-            <label class="checkbox-row"><input type="checkbox" id="diabetesInput"><span>Сахарный диабет</span></label>
+        <div id="killipBlock">
+          <h2 class="subsection-header">Класс ОСН (Killip)</h2>
+          <div class="subsection-body">
+            <div class="select-wrap">
+              <select id="killipSelect" class="field-select"></select>
+              <svg class="select-arrow" viewBox="0 0 24 24" width="20" height="20"><path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
           </div>
         </div>
-      </div>
-    </section>
 
-    <!-- Блок результатов -->
-    <section class="card" id="resultsCard">
-      <div class="results-banner rounded-top">Результаты</div>
-
-      <div class="result-block" id="bmiBlock">
-        <div class="subsection-header result-header">
-          <span>ИМТ (индекс массы тела)</span><span id="bmiValue">—</span>
+        <div id="clinicalBlock">
+          <h2 class="subsection-header">Клинические признаки</h2>
+          <div class="subsection-body">
+            <div id="graceChecks">
+              <label class="checkbox-row"><input type="checkbox" id="cardiacArrestInput"><span>Остановка сердца при поступлении</span></label>
+              <label class="checkbox-row"><input type="checkbox" id="stDeviationInput"><span>Отклонение сегмента ST на ЭКГ</span></label>
+              <label class="checkbox-row"><input type="checkbox" id="elevatedEnzymesInput"><span>Высокий уровень сердечных ферментов</span></label>
+            </div>
+            <div id="crusadeChecks">
+              <label class="checkbox-row"><input type="checkbox" id="signsOfChfInput"><span>Признаки ХСН при поступлении</span></label>
+              <label class="checkbox-row"><input type="checkbox" id="vascularDiseaseInput"><span>Периферический атеросклероз / ИБС</span></label>
+              <label class="checkbox-row"><input type="checkbox" id="strokeHistoryInput"><span>ОНМК/ТИА в анамнезе</span></label>
+              <label class="checkbox-row"><input type="checkbox" id="diabetesInput"><span>Сахарный диабет</span></label>
+            </div>
+          </div>
         </div>
-        <div class="subsection-body" id="bmiComments"></div>
-      </div>
+      </section>
 
-      <div class="result-block" id="gfrBlock">
-        <div class="subsection-header result-header">
-          <span>СКФ (CKD-EPI 2021)</span><span id="gfrValue">—</span>
+      <section class="card" id="resultsCard">
+        <div class="results-banner rounded-top">Результаты</div>
+
+        <div class="result-block" id="bmiBlock">
+          <div class="subsection-header result-header">
+            <span>ИМТ (индекс массы тела)</span><span id="bmiValue">—</span>
+          </div>
+          <div class="subsection-body" id="bmiComments"></div>
         </div>
-        <div class="subsection-body" id="gfrComments"></div>
-      </div>
 
-      <div class="result-block" id="crclBlock">
-        <div class="subsection-header result-header">
-          <span>Клиренс креатинина (Кокрофт-Голт)</span><span id="crclValue">—</span>
+        <div class="result-block" id="gfrBlock">
+          <div class="subsection-header result-header">
+            <span>СКФ (CKD-EPI 2021)</span><span id="gfrValue">—</span>
+          </div>
+          <div class="subsection-body" id="gfrComments"></div>
         </div>
-        <div class="subsection-body" id="crclComments"></div>
-      </div>
 
-      <div class="result-block" id="graceBlock">
-        <div class="subsection-header result-header">
-          <span>Шкала GRACE</span><span id="graceValue">—</span>
+        <div class="result-block" id="crclBlock">
+          <div class="subsection-header result-header">
+            <span>Клиренс креатинина (Кокрофт-Голт)</span><span id="crclValue">—</span>
+          </div>
+          <div class="subsection-body" id="crclComments"></div>
         </div>
-        <div class="subsection-body" id="graceComments"></div>
-      </div>
 
-      <div class="result-block" id="crusadeBlock">
-        <div class="subsection-header result-header">
-          <span>Шкала CRUSADE</span><span id="crusadeValue">—</span>
+        <div class="result-block" id="graceBlock">
+          <div class="subsection-header result-header">
+            <span>Шкала GRACE</span><span id="graceValue">—</span>
+          </div>
+          <div class="subsection-body" id="graceComments"></div>
         </div>
-        <div class="subsection-body" id="crusadeComments"></div>
-      </div>
-    </section>
 
-    <div style="height:8px"></div>
+        <div class="result-block" id="crusadeBlock">
+          <div class="subsection-header result-header">
+            <span>Шкала CRUSADE</span><span id="crusadeValue">—</span>
+          </div>
+          <div class="subsection-body" id="crusadeComments"></div>
+        </div>
+      </section>
+
+      <div style="height:8px"></div>
+    </div>
+
+    <!-- ===================== Страница "ФП" ===================== -->
+    <div id="pageAfib" class="page" hidden>
+
+      <section class="card" id="afibInputCard">
+        <div id="afibPatientBlock">
+          <h2 class="subsection-header header-row">
+            <span>Пациент</span>
+            <button type="button" class="icon-btn reset-btn" aria-label="Сбросить все данные" title="Сбросить все данные">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" fill="currentColor"/></svg>
+            </button>
+          </h2>
+          <div class="subsection-body">
+            <div class="row" id="afibAgeSexRow">
+              <div class="field-wrap grow" id="afibAgeFieldWrap">
+                <label class="field-label" for="afibAgeInput">Возраст, лет</label>
+                <input class="field-input" id="afibAgeInput" type="number" inputmode="numeric" pattern="[0-9]*">
+              </div>
+              <div class="sex-toggle grow" id="afibSexToggle">
+                <button class="sex-btn" id="afibSexMale" data-sex="MALE" type="button">
+                  <img class="sex-icon" id="afibSexMaleIcon" alt="Муж">
+                </button>
+                <button class="sex-btn" id="afibSexFemale" data-sex="FEMALE" type="button">
+                  <img class="sex-icon" id="afibSexFemaleIcon" alt="Жен">
+                </button>
+              </div>
+            </div>
+            <div class="row" id="afibSbpRow">
+              <div class="field-wrap grow" id="afibSbpFieldWrap">
+                <label class="field-label" for="afibSbpInput">АД сист. мм рт.ст.</label>
+                <input class="field-input" id="afibSbpInput" type="number" inputmode="numeric" pattern="[0-9]*">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="afibClinicalBlock">
+          <h2 class="subsection-header">Клинические факторы</h2>
+          <div class="subsection-body">
+            <div id="chadsVascChecks">
+              <label class="checkbox-row"><input type="checkbox" id="afibSignsOfChfInput"><span>ХСН / дисфункция ЛЖ / ФВ ≤40%</span></label>
+              <label class="checkbox-row"><input type="checkbox" id="hypertensionInput"><span>Артериальная гипертензия в анамнезе</span></label>
+              <label class="checkbox-row"><input type="checkbox" id="afibVascularDiseaseInput"><span>Периферический атеросклероз / ИБС</span></label>
+              <label class="checkbox-row"><input type="checkbox" id="afibStrokeHistoryInput"><span>Инсульт/ТИА/тромбоэмболия в анамнезе</span></label>
+              <label class="checkbox-row"><input type="checkbox" id="afibDiabetesInput"><span>Сахарный диабет</span></label>
+            </div>
+            <div id="hasBledChecks">
+              <label class="checkbox-row hint-row"><input type="checkbox" id="renalImpairmentInput"><span>Нарушение функции почек</span></label>
+              <p class="checkbox-hint">креатинин ≥200 мкмоль/л, или диализ, или после трансплантации почки</p>
+              <label class="checkbox-row hint-row"><input type="checkbox" id="hepaticImpairmentInput"><span>Нарушение функции печени</span></label>
+              <p class="checkbox-hint">билирубин &gt;2× верхней границы нормы, АСТ/АЛТ/ЩФ &gt;3× верхней границы нормы</p>
+              <label class="checkbox-row"><input type="checkbox" id="bleedingHistoryInput"><span>Кровотечение в анамнезе</span></label>
+              <label class="checkbox-row"><input type="checkbox" id="labileInrInput"><span>Лабильное МНО / нестабильная антикоагуляция</span></label>
+              <label class="checkbox-row"><input type="checkbox" id="antiplateletOrNsaidInput"><span>Приём антиагрегантов/НПВС</span></label>
+              <label class="checkbox-row"><input type="checkbox" id="alcoholUseInput"><span>Злоупотребление алкоголем</span></label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" id="afibResultsCard">
+        <div class="results-banner rounded-top">Результаты</div>
+
+        <div class="result-block" id="chadsVascBlock">
+          <div class="subsection-header result-header">
+            <span>Шкала CHA2DS2-VASc</span><span id="chadsVascValue">—</span>
+          </div>
+          <div class="subsection-body" id="chadsVascComments"></div>
+        </div>
+
+        <div class="result-block" id="hasBledBlock">
+          <div class="subsection-header result-header">
+            <span>Шкала HAS-BLED</span><span id="hasBledValue">—</span>
+          </div>
+          <div class="subsection-body" id="hasBledComments"></div>
+        </div>
+      </section>
+
+      <div style="height:8px"></div>
+    </div>
+
+    <div style="height:0"></div>
   </main>
 </div>
 
@@ -176,12 +277,12 @@
         <span>Тёмная тема</span>
         <label class="switch"><input type="checkbox" id="darkThemeSwitch"><span class="slider"></span></label>
       </div>
-      <div id="paletteLabel">Цвет фона</div>
+      <div id="paletteLabel">Наборы тем</div>
       <div id="palette"></div>
     </div>
     <div class="dialog-actions">
-      <button class="btn-text" data-action="cancel-theme">Отмена</button>
       <button class="btn-text" data-action="confirm-theme">Готово</button>
+      <button class="btn-text" data-action="cancel-theme">Отмена</button>
     </div>
   </div>
 </div>
@@ -192,11 +293,15 @@
     <h3 id="formulasDialogTitle">Формулы</h3>
     <div class="dialog-body">
       <p class="dialog-hint">Выберите блоки, отображаемые в разделе «Результаты»</p>
+      <h4 class="formula-group-title">Карточка "Основные шкалы"</h4>
       <div class="switch-row"><span>ИМТ (индекс массы тела)</span><label class="switch"><input type="checkbox" id="toggleBmi" checked><span class="slider"></span></label></div>
       <div class="switch-row"><span>СКФ (CKD-EPI 2021)</span><label class="switch"><input type="checkbox" id="toggleGfr" checked><span class="slider"></span></label></div>
       <div class="switch-row"><span>Клиренс креатинина (Кокрофт-Голт)</span><label class="switch"><input type="checkbox" id="toggleCrCl" checked><span class="slider"></span></label></div>
       <div class="switch-row"><span>Шкала GRACE</span><label class="switch"><input type="checkbox" id="toggleGrace" checked><span class="slider"></span></label></div>
       <div class="switch-row"><span>Шкала CRUSADE</span><label class="switch"><input type="checkbox" id="toggleCrusade" checked><span class="slider"></span></label></div>
+      <h4 class="formula-group-title">Карточка "CHA2DS2-VASc / HAS-BLED"</h4>
+      <div class="switch-row"><span>Шкала CHA2DS2-VASc</span><label class="switch"><input type="checkbox" id="toggleChadsVasc" checked><span class="slider"></span></label></div>
+      <div class="switch-row"><span>Шкала HAS-BLED</span><label class="switch"><input type="checkbox" id="toggleHasBled" checked><span class="slider"></span></label></div>
     </div>
     <div class="dialog-actions">
       <button class="btn-text" data-action="close-formulas">Готово</button>
@@ -209,9 +314,9 @@
   <div class="dialog" role="dialog" aria-labelledby="aboutDialogTitle">
     <h3 id="aboutDialogTitle">О программе</h3>
     <div class="dialog-body">
-      <p class="about-title">Кардио-калькулятор ОКС</p>
-      <p class="about-version">Версия 2.0 (веб)</p>
-      <p>Приложение рассчитывает вспомогательные клинические показатели по введённым данным: ИМТ, СКФ (CKD-EPI 2021), клиренс креатинина (формула Кокрофта-Голта), шкалу GRACE и шкалу CRUSADE.</p>
+      <p class="about-title">Кардио-калькулятор</p>
+      <p class="about-version">Версия 3.0 (веб)</p>
+      <p>Приложение рассчитывает вспомогательные клинические показатели по введённым данным: ИМТ, СКФ (CKD-EPI 2021), клиренс креатинина (формула Кокрофта-Голта), шкалу GRACE и шкалу CRUSADE (карточка «Основные шкалы»), а также шкалы CHA2DS2-VASc и HAS-BLED (карточка «CHA2DS2-VASc / HAS-BLED»).</p>
       <p class="about-disclaimer">Важно: приложение не является медицинским изделием и не ставит диагноз. Результаты расчётов носят справочный характер и не заменяют консультацию врача — решения о диагностике и лечении должен принимать квалифицированный медицинский специалист.</p>
     </div>
     <div class="dialog-actions">

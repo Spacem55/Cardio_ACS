@@ -177,3 +177,58 @@ function crusadeScore({ hematocrit, creatinineClearance, heartRate, sex, signsOf
   else { riskCategory = 'Очень высокий'; bleedingRiskPercent = '≈ 19.5%'; }
   return { points, riskCategory, bleedingRiskPercent };
 }
+
+// ---------- Шкала CHA2DS2-VASc (риск инсульта при фибрилляции предсердий) ----------
+// Классическая версия (с учётом женского пола, макс. 9 баллов) — по действующим
+// клиническим рекомендациям РКО "Фибрилляция и трепетание предсердий у взрослых"
+// (КР 382_2, 2025): переход на упрощённую CHA2DS2-VA (ESC 2024, без пола) в РФ
+// отклонён, российские эксперты продолжают использовать CHA2DS2-VASc.
+// Источник: Lip GY, et al. Chest. 2010.
+function cha2ds2VascAgePoints(age) {
+  if (age >= 75) return 2;
+  if (age >= 65) return 1;
+  return 0;
+}
+function cha2ds2VascScore({ age, sex, chfOrLvDysfunction, hypertension, diabetes, strokeOrTiaOrThromboembolism, vascularDisease }) {
+  const points = (chfOrLvDysfunction ? 1 : 0) +
+    (hypertension ? 1 : 0) +
+    cha2ds2VascAgePoints(age) +
+    (diabetes ? 1 : 0) +
+    (strokeOrTiaOrThromboembolism ? 2 : 0) +
+    (vascularDisease ? 1 : 0) +
+    (sex === Sex.FEMALE ? 1 : 0);
+
+  // Пороги по действующим КР РКО раздельны для мужчин и женщин (женский пол сам
+  // добавляет 1 балл, поэтому "точка отсчёта" риска у женщин на 1 балл выше).
+  let interpretation;
+  if (sex === Sex.FEMALE) {
+    if (points >= 3) interpretation = 'Антикоагулянты показаны';
+    else if (points === 2) interpretation = 'Решение индивидуально';
+    else interpretation = 'Антикоагулянты не показаны';
+  } else {
+    if (points >= 2) interpretation = 'Антикоагулянты показаны';
+    else if (points === 1) interpretation = 'Решение индивидуально';
+    else interpretation = 'Антикоагулянты не показаны';
+  }
+  return { points, interpretation };
+}
+
+// ---------- Шкала HAS-BLED (риск кровотечения на антикоагулянтах) ----------
+// Источник: Pisters R, et al. Chest. 2010.
+// uncontrolledHypertension и elderly передаются УЖЕ вычисленными вызывающей стороной
+// (автоматически из САД >160 и возраста >65 соответственно) — своих отдельных полей
+// ввода для них в приложении нет, см. app.js.
+function hasBledScore({ uncontrolledHypertension, renalImpairment, hepaticImpairment, strokeHistory, bleedingHistory, labileInr, elderly, antiplateletOrNsaid, alcoholUse }) {
+  const points = (uncontrolledHypertension ? 1 : 0) +
+    (renalImpairment ? 1 : 0) +
+    (hepaticImpairment ? 1 : 0) +
+    (strokeHistory ? 1 : 0) +
+    (bleedingHistory ? 1 : 0) +
+    (labileInr ? 1 : 0) +
+    (elderly ? 1 : 0) +
+    (antiplateletOrNsaid ? 1 : 0) +
+    (alcoholUse ? 1 : 0);
+
+  const riskCategory = points >= 3 ? 'Высокий риск кровотечения' : 'Низкий/умеренный риск';
+  return { points, riskCategory };
+}

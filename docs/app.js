@@ -1,14 +1,14 @@
 'use strict';
-// Кардио-калькулятор ОКС — веб-версия (v2.0, "с нуля", версия Android как эталон).
-// Логика построена по полному свежему разбору MainActivity.kt текущей (321) версии
-// приложения: видимость полей, сохранение темы, цветовая математика акцента,
-// переключатель пола (картинки) и т.д. — см. комментарии по ходу файла.
+// Кардио-калькулятор — веб-версия (v3.0). Полностью переписана поверх v2.0 по
+// свежему разбору текущего MainActivity.kt/Calculators.kt (321): добавлена вкладка
+// "ФП" (CHA2DS2-VASc / HAS-BLED), новая система тем (наборы фон+акцент вместо
+// одной палитры фона), обновлённое меню ("Поделиться"), подзаголовки-карточки в
+// диалоге "Формулы". См. комментарии по ходу файла.
 
 // ===================== Константы (порт из MainActivity.kt) =====================
 
 // Фирменные цвета (ui/theme/Color.kt)
 const CARDIO_PRIMARY = '#3A75C4';
-const CARDIO_BACKGROUND = '#AECEF9';
 const CARDIO_SURFACE = '#FFFFFF';
 const CARDIO_ON_SURFACE = '#1B1B1B';
 const CARDIO_DARK_BACKGROUND = '#1A1A1A';
@@ -16,7 +16,6 @@ const CARDIO_DARK_SURFACE = '#262626';
 const CARDIO_DARK_ON_SURFACE = '#E8E8E8';
 const CARDIO_DARK_ON_SURFACE_VARIANT = '#B0B0B0';
 const CARDIO_DARK_PRIMARY = '#6FA8DC';
-const CARDIO_DARK_ON_PRIMARY = '#0D1B2A';
 const CARDIO_DARK_OUTLINE = '#4A4A4A';
 // Material3 baseline "outline" по умолчанию — используется светлой темой приложения,
 // т.к. LightAppColorScheme его не переопределяет (Theme.kt).
@@ -24,26 +23,43 @@ const M3_LIGHT_OUTLINE = '#79747E';
 // Светлая тема НЕ переопределяет onSurfaceVariant отдельным приглушённым тоном —
 // Theme.kt явно задаёт onSurfaceVariant = CardioOnSurface (тот же #1B1B1B, что и onSurface).
 
-// Палитра фона, порядок радуги (11 цветов) — MainActivity.kt backgroundPalette.
-const BACKGROUND_PALETTE = [
-  '#FF7F50', // коралл
-  '#FFF3E0', // светло-персиковый
-  '#F3D117', // жёлтый
-  '#AEEA00', // салатовый
-  '#09AB18', // зелёный
-  '#7FFFD4', // аквамарин
-  '#AECEF9', // светло-голубой
-  '#0728C5', // синий
-  '#6803B7', // фиолетовый
-  '#FF69B4', // розовый
-  '#FCE4EC'  // светло-розовый
-];
-
-// Сдвиг яркости верхней полосы/полосы "Результаты" в тёмной теме (версия 17).
+// Сдвиг яркости верхней полосы/полосы "Результаты"/вкладок в тёмной теме.
 const DARK_THEME_ACCENT_TONE_ADJUST = -0.3;
-// Степень затенения переключателя "Пол", когда он не нужен (версия 19): плашка —
-// цвет surface поверх иконок, alpha 0.85 (MaybeUnneededField).
+// Степень затенения переключателя "Пол", когда он не нужен (MaybeUnneededField).
 const UNNEEDED_SHADE_ALPHA = 0.85;
+// Заливка между шапкой и кнопками-вкладками (headerFillOpacity, зафиксировано после
+// калибровки — пункт меню на Android убран, значение больше не настраивается).
+const HEADER_FILL_OPACITY = 0.3113;
+// Прозрачность заливки/обводки неактивной вкладки (inactiveButtonFillOpacity/
+// inactiveButtonBorderOpacity, тоже зафиксированы после калибровки).
+const TAB_INACTIVE_FILL_OPACITY = 0.5691;
+const TAB_INACTIVE_BORDER_OPACITY = 0.96;
+
+// ===================== Наборы тем (порт ThemeEntry + forced-defaults v4) =====================
+// Каждая тема — пара (цвет фона, цвет акцента). Раньше акцент всегда вычислялся из
+// фона по формуле; сейчас (после редактора тем) оба цвета хранятся отдельно и
+// заданы напрямую — те же 7 наборов, что зафиксированы как дефолт на Android
+// (performSettingsSnapshotRestoreIfNeeded, версия 4).
+const DEFAULT_LIGHT_THEMES = [
+  { id: 0, bg: '#EAC8B7', accent: '#CB834B' },
+  { id: 4, bg: '#CEF1D3', accent: '#227628' },
+  { id: 5, bg: '#D4F2E8', accent: '#2E9D78' },
+  { id: 6, bg: '#CDDCF0', accent: '#2E5E9D' },
+  { id: 7, bg: '#C6CDEE', accent: '#2B4493' },
+  { id: 8, bg: '#E2CEF1', accent: '#5F288A' },
+  { id: 9, bg: '#F0CADD', accent: '#A7306C' }
+];
+const DEFAULT_DARK_THEMES = [
+  { id: 0, bg: '#190C07', accent: '#BD5B37' },
+  { id: 1, bg: '#241A0A', accent: '#B36C34' },
+  { id: 5, bg: '#081D16', accent: '#30A47D' },
+  { id: 6, bg: '#0B1525', accent: '#376FBD' },
+  { id: 8, bg: '#1D0C29', accent: '#8A41C8' },
+  { id: 9, bg: '#1F0914', accent: '#C63A85' },
+  { id: 10, bg: '#1F090F', accent: '#B6354E' }
+];
+const DEFAULT_SELECTED_LIGHT_ID = 6;
+const DEFAULT_SELECTED_DARK_ID = 6;
 
 // ===================== Цветовая математика (порт HSV-функций) =====================
 
@@ -100,17 +116,6 @@ function relativeLuminance({ r, g, b }) {
 function contrastingTextColor(bgHex) {
   return relativeLuminance(hexToRgb(bgHex)) > 0.5 ? '#1B1B1B' : '#FFFFFF';
 }
-/** Акцентный цвет заголовков, подобранный в тон выбранному фону (учитывает тёмную тему). */
-function accentColorFor(bgHex, isDark) {
-  const hsv = rgbToHsv(hexToRgb(bgHex));
-  if (hsv.s < 0.08) {
-    return isDark ? CARDIO_DARK_PRIMARY : CARDIO_PRIMARY;
-  }
-  const s = isDark ? 0.5 : 0.55;
-  const v = isDark ? 0.7 : 0.55;
-  const { r, g, b } = hsvToRgb(hsv.h, s, v);
-  return rgbToHex(r, g, b);
-}
 /** Сдвигает яркость (V) цвета на delta, результат зажат в [0,1]. */
 function adjustLightness(hex, delta) {
   if (delta === 0) return hex;
@@ -127,7 +132,9 @@ function overAlpha(hex, alpha, baseHex) {
 }
 
 // ===================== Сохранение темы (аналог SharedPreferences) =====================
-const THEME_STORAGE_KEY = 'cardio_theme_prefs_v2';
+// Новый ключ (v3) — старые сохранения формата v2 (одна палитра фона) сознательно
+// игнорируются, аналогично "forced one-time migration" на Android.
+const THEME_STORAGE_KEY = 'cardio_theme_prefs_v3';
 
 function loadThemePrefs() {
   try {
@@ -135,35 +142,58 @@ function loadThemePrefs() {
     if (raw) {
       const parsed = JSON.parse(raw);
       return {
-        background: typeof parsed.background === 'string' ? parsed.background : CARDIO_BACKGROUND,
-        darkTheme: !!parsed.darkTheme
+        isDarkTheme: !!parsed.isDarkTheme,
+        lightThemes: Array.isArray(parsed.lightThemes) && parsed.lightThemes.length ? parsed.lightThemes : DEFAULT_LIGHT_THEMES,
+        darkThemes: Array.isArray(parsed.darkThemes) && parsed.darkThemes.length ? parsed.darkThemes : DEFAULT_DARK_THEMES,
+        selectedLightId: typeof parsed.selectedLightId === 'number' ? parsed.selectedLightId : DEFAULT_SELECTED_LIGHT_ID,
+        selectedDarkId: typeof parsed.selectedDarkId === 'number' ? parsed.selectedDarkId : DEFAULT_SELECTED_DARK_ID
       };
     }
   } catch (e) { /* localStorage недоступен — используем значения по умолчанию */ }
-  return { background: CARDIO_BACKGROUND, darkTheme: false };
+  return {
+    isDarkTheme: false,
+    lightThemes: DEFAULT_LIGHT_THEMES,
+    darkThemes: DEFAULT_DARK_THEMES,
+    selectedLightId: DEFAULT_SELECTED_LIGHT_ID,
+    selectedDarkId: DEFAULT_SELECTED_DARK_ID
+  };
 }
-function saveThemePrefs(background, darkTheme) {
+function saveThemePrefs() {
   try {
-    localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify({ background, darkTheme }));
+    localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify({
+      isDarkTheme, lightThemes, darkThemes, selectedLightId, selectedDarkId
+    }));
   } catch (e) { /* сохранение — best effort, как и на Android */ }
 }
 
+const themePrefs = loadThemePrefs();
+let isDarkTheme = themePrefs.isDarkTheme;
+let lightThemes = themePrefs.lightThemes;
+let darkThemes = themePrefs.darkThemes;
+let selectedLightId = themePrefs.selectedLightId;
+let selectedDarkId = themePrefs.selectedDarkId;
+
+function findTheme(list, id) {
+  return list.find((t) => t.id === id) || list[0];
+}
+
 // ===================== Состояние приложения =====================
-// Формулы (showBmi..showCrusade) и все поля пациента на Android хранятся только через
-// rememberSaveable (без SharedPreferences) — переживают поворот экрана, но НЕ полный
-// перезапуск приложения. Перезагрузка страницы — ближайший веб-аналог полного
-// перезапуска, поэтому это состояние намеренно НЕ сохраняется в localStorage.
+// Поля пациента/формулы-переключатели на Android хранятся только через
+// rememberSaveable (без SharedPreferences) — переживают поворот экрана, но НЕ
+// полный перезапуск приложения. Перезагрузка страницы — ближайший веб-аналог
+// полного перезапуска, поэтому это состояние намеренно НЕ сохраняется в localStorage.
 const state = {
-  sex: null, // null | 'MALE' | 'FEMALE' — изначально не выбран (версия 20)
+  activeTab: 'oks', // 'oks' | 'afib'
+  sex: null, // null | 'MALE' | 'FEMALE'
   age: '', height: '', weight: '', creatinine: '', heartRate: '', sbp: '', hematocrit: '',
   cardiacArrest: false, stDeviation: false, elevatedEnzymes: false,
   killip: 'I',
-  signsOfChf: false, priorVascularDisease: false, diabetes: false,
-  showBmi: true, showGfr: true, showCrCl: true, showGrace: true, showCrusade: true
+  signsOfChf: false, vascularDisease: false, strokeHistory: false, diabetes: false,
+  hypertension: false, renalImpairment: false, hepaticImpairment: false,
+  bleedingHistory: false, labileInr: false, antiplateletOrNsaid: false, alcoholUse: false,
+  showBmi: true, showGfr: true, showCrCl: true, showGrace: true, showCrusade: true,
+  showChadsVasc: true, showHasBled: true
 };
-const themePrefs = loadThemePrefs();
-let backgroundColor = themePrefs.background;
-let isDarkTheme = themePrefs.darkTheme;
 
 // ===================== Утилиты парсинга (аналог toDoubleOrNullSafe/toIntOrNullSafe) =====================
 function toIntOrNull(s) {
@@ -181,11 +211,13 @@ function toDoubleOrNull(s) {
 // ===================== DOM refs =====================
 const $ = (id) => document.getElementById(id);
 const el = {
-  app: $('app'),
-  titleBar: $('titleBar'),
   menuButton: $('menuButton'),
   menuDropdown: $('menuDropdown'),
-  resetPatientButton: $('resetPatientButton'),
+  tabOks: $('tabOks'), tabAfib: $('tabAfib'),
+  tabOksLabel: $('tabOksLabel'), tabAfibLabel: $('tabAfibLabel'),
+  pageOks: $('pageOks'), pageAfib: $('pageAfib'),
+
+  // ---- ОКС ----
   patientBlock: $('patientBlock'),
   labBlock: $('labBlock'),
   killipBlock: $('killipBlock'),
@@ -210,7 +242,8 @@ const el = {
   elevatedEnzymesInput: $('elevatedEnzymesInput'),
   graceChecks: $('graceChecks'),
   signsOfChfInput: $('signsOfChfInput'),
-  priorVascularDiseaseInput: $('priorVascularDiseaseInput'),
+  vascularDiseaseInput: $('vascularDiseaseInput'),
+  strokeHistoryInput: $('strokeHistoryInput'),
   diabetesInput: $('diabetesInput'),
   crusadeChecks: $('crusadeChecks'),
   bmiBlock: $('bmiBlock'), bmiValue: $('bmiValue'), bmiComments: $('bmiComments'),
@@ -218,69 +251,96 @@ const el = {
   crclBlock: $('crclBlock'), crclValue: $('crclValue'), crclComments: $('crclComments'),
   graceBlock: $('graceBlock'), graceValue: $('graceValue'), graceComments: $('graceComments'),
   crusadeBlock: $('crusadeBlock'), crusadeValue: $('crusadeValue'), crusadeComments: $('crusadeComments'),
+
+  // ---- ФП ----
+  afibPatientBlock: $('afibPatientBlock'),
+  afibClinicalBlock: $('afibClinicalBlock'),
+  afibAgeSexRow: $('afibAgeSexRow'),
+  afibSbpRow: $('afibSbpRow'),
+  afibAgeFieldWrap: $('afibAgeFieldWrap'), afibAgeInput: $('afibAgeInput'),
+  afibSbpFieldWrap: $('afibSbpFieldWrap'), afibSbpInput: $('afibSbpInput'),
+  afibSexToggle: $('afibSexToggle'),
+  afibSexMale: $('afibSexMale'), afibSexMaleIcon: $('afibSexMaleIcon'),
+  afibSexFemale: $('afibSexFemale'), afibSexFemaleIcon: $('afibSexFemaleIcon'),
+  chadsVascChecks: $('chadsVascChecks'),
+  afibSignsOfChfInput: $('afibSignsOfChfInput'),
+  hypertensionInput: $('hypertensionInput'),
+  afibVascularDiseaseInput: $('afibVascularDiseaseInput'),
+  afibStrokeHistoryInput: $('afibStrokeHistoryInput'),
+  afibDiabetesInput: $('afibDiabetesInput'),
+  hasBledChecks: $('hasBledChecks'),
+  renalImpairmentInput: $('renalImpairmentInput'),
+  hepaticImpairmentInput: $('hepaticImpairmentInput'),
+  bleedingHistoryInput: $('bleedingHistoryInput'),
+  labileInrInput: $('labileInrInput'),
+  antiplateletOrNsaidInput: $('antiplateletOrNsaidInput'),
+  alcoholUseInput: $('alcoholUseInput'),
+  chadsVascBlock: $('chadsVascBlock'), chadsVascValue: $('chadsVascValue'), chadsVascComments: $('chadsVascComments'),
+  hasBledBlock: $('hasBledBlock'), hasBledValue: $('hasBledValue'), hasBledComments: $('hasBledComments'),
+
+  // ---- Диалоги ----
   themeDialogOverlay: $('themeDialogOverlay'),
   darkThemeSwitch: $('darkThemeSwitch'),
   palette: $('palette'),
   formulasDialogOverlay: $('formulasDialogOverlay'),
   toggleBmi: $('toggleBmi'), toggleGfr: $('toggleGfr'), toggleCrCl: $('toggleCrCl'),
   toggleGrace: $('toggleGrace'), toggleCrusade: $('toggleCrusade'),
+  toggleChadsVasc: $('toggleChadsVasc'), toggleHasBled: $('toggleHasBled'),
   aboutDialogOverlay: $('aboutDialogOverlay')
 };
 
-// ===================== Палитра (диалог "Тема") =====================
-function buildPalette() {
-  el.palette.innerHTML = '';
-  BACKGROUND_PALETTE.forEach((color) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'swatch';
-    btn.style.background = color;
-    btn.dataset.color = color;
-    btn.addEventListener('click', () => {
-      pendingBackground = color;
-      [...el.palette.children].forEach((c) => c.classList.toggle('selected', c.dataset.color === color));
-    });
-    el.palette.appendChild(btn);
-  });
-}
-buildPalette();
-
-// ===================== Рендер =====================
+// ===================== Расчёт "нужности" полей (порт needs-флагов из CardioScreen) =====================
 function needsFlags() {
-  const ageNeeded = state.showGfr || state.showCrCl || state.showGrace || state.showCrusade;
+  const ageNeededOks = state.showGfr || state.showCrCl || state.showGrace || state.showCrusade;
+  const sexNeededOks = state.showGfr || state.showCrCl || state.showCrusade;
+  const sbpNeededOks = state.showGrace || state.showCrusade;
   const heightNeeded = state.showBmi;
   const weightNeeded = state.showBmi || state.showCrCl || state.showCrusade;
-  const sexNeeded = state.showGfr || state.showCrCl || state.showCrusade;
   const creatinineNeeded = state.showGfr || state.showCrCl || state.showGrace || state.showCrusade;
   const heartRateNeeded = state.showGrace || state.showCrusade;
-  const sbpNeeded = state.showGrace || state.showCrusade;
   const hematocritNeeded = state.showCrusade;
 
-  const ageSexRowNeeded = ageNeeded || sexNeeded;
-  const heightWeightRowNeeded = heightNeeded || weightNeeded;
-  const hrSbpRowNeeded = heartRateNeeded || sbpNeeded;
-  const creatinineHematocritRowNeeded = creatinineNeeded || hematocritNeeded;
+  const ageNeededAfib = state.showChadsVasc;
+  const sexNeededAfib = state.showChadsVasc;
+  const sbpNeededAfib = state.showHasBled;
 
-  const patientBlockNeeded = ageSexRowNeeded || heightWeightRowNeeded;
+  const ageNeeded = ageNeededOks || ageNeededAfib;
+  const sexNeeded = sexNeededOks || sexNeededAfib;
+  const sbpNeeded = sbpNeededOks || sbpNeededAfib;
+
+  const ageSexRowNeededOks = ageNeededOks || sexNeededOks;
+  const heightWeightRowNeeded = heightNeeded || weightNeeded;
+  const hrSbpRowNeeded = heartRateNeeded || sbpNeededOks;
+  const creatinineHematocritRowNeeded = creatinineNeeded || hematocritNeeded;
+  const patientBlockNeeded = ageSexRowNeededOks || heightWeightRowNeeded;
   const labBlockNeeded = hrSbpRowNeeded || creatinineHematocritRowNeeded;
   const clinicalSignsBlockNeeded = state.showGrace || state.showCrusade;
-
   let firstVisibleInputBlock = null;
   if (patientBlockNeeded) firstVisibleInputBlock = 'patient';
   else if (labBlockNeeded) firstVisibleInputBlock = 'lab';
   else if (state.showGrace) firstVisibleInputBlock = 'killip';
   else if (clinicalSignsBlockNeeded) firstVisibleInputBlock = 'clinical';
 
+  const ageSexRowNeededAfib = ageNeededAfib || sexNeededAfib;
+  const sbpRowNeededAfib = sbpNeededAfib;
+  const afibPatientBlockNeeded = ageSexRowNeededAfib || sbpRowNeededAfib;
+  const afibClinicalBlockNeeded = state.showChadsVasc || state.showHasBled;
+  let firstVisibleAfibInputBlock = null;
+  if (afibPatientBlockNeeded) firstVisibleAfibInputBlock = 'afibPatient';
+  else if (afibClinicalBlockNeeded) firstVisibleAfibInputBlock = 'afibClinical';
+
   return {
-    ageNeeded, heightNeeded, weightNeeded, sexNeeded, creatinineNeeded, heartRateNeeded, sbpNeeded, hematocritNeeded,
-    ageSexRowNeeded, heightWeightRowNeeded, hrSbpRowNeeded, creatinineHematocritRowNeeded,
-    patientBlockNeeded, labBlockNeeded, clinicalSignsBlockNeeded, firstVisibleInputBlock
+    ageNeededOks, sexNeededOks, sbpNeededOks, heightNeeded, weightNeeded, creatinineNeeded, heartRateNeeded, hematocritNeeded,
+    ageNeededAfib, sexNeededAfib, sbpNeededAfib,
+    ageNeeded, sexNeeded, sbpNeeded,
+    ageSexRowNeededOks, heightWeightRowNeeded, hrSbpRowNeeded, creatinineHematocritRowNeeded,
+    patientBlockNeeded, labBlockNeeded, clinicalSignsBlockNeeded, firstVisibleInputBlock,
+    ageSexRowNeededAfib, sbpRowNeededAfib, afibPatientBlockNeeded, afibClinicalBlockNeeded, firstVisibleAfibInputBlock
   };
 }
 
-// Обнуление данных при переходе поля/пункта в "не нужно" (версия 18, item 5) — вызывается
-// ПОСЛЕ пересчёта needs, если какой-то флаг стал false.
-let prevNeeds = null;
+// Обнуление данных при переходе поля/пункта в "не нужно" — вызывается ПОСЛЕ
+// пересчёта needs, если какой-то флаг стал false (порт LaunchedEffect-блоков).
 function applyAutoReset(n) {
   if (!n.ageNeeded) state.age = '';
   if (!n.heightNeeded) state.height = '';
@@ -293,8 +353,13 @@ function applyAutoReset(n) {
   if (!state.showGrace) {
     state.cardiacArrest = false; state.stDeviation = false; state.elevatedEnzymes = false; state.killip = 'I';
   }
-  if (!state.showCrusade) {
-    state.signsOfChf = false; state.priorVascularDisease = false; state.diabetes = false;
+  if (!state.showCrusade && !state.showChadsVasc) {
+    state.signsOfChf = false; state.vascularDisease = false; state.strokeHistory = false; state.diabetes = false;
+  }
+  if (!state.showChadsVasc) state.hypertension = false;
+  if (!state.showHasBled) {
+    state.renalImpairment = false; state.hepaticImpairment = false; state.bleedingHistory = false;
+    state.labileInr = false; state.antiplateletOrNsaid = false; state.alcoholUse = false;
   }
 }
 
@@ -310,17 +375,31 @@ function setUnneededInput(inputEl, needed, currentValue) {
   }
 }
 
+function addComment(container, text) {
+  const p = document.createElement('p');
+  p.className = 'result-comment';
+  p.textContent = text;
+  container.appendChild(p);
+}
+function addHint(container, fields) {
+  const p = document.createElement('p');
+  p.className = 'missing-hint';
+  p.textContent = `Заполните: ${fields}`;
+  container.appendChild(p);
+}
+
+// ===================== Рендер =====================
 function render() {
   const n = needsFlags();
   applyAutoReset(n);
 
   // ---- Тема/цвета ----
-  const accentColor = accentColorFor(backgroundColor, isDarkTheme);
+  const selectedTheme = isDarkTheme ? findTheme(darkThemes, selectedDarkId) : findTheme(lightThemes, selectedLightId);
+  const effectiveBackground = selectedTheme.bg;
+  const accentColor = selectedTheme.accent;
   const topBarColor = isDarkTheme ? adjustLightness(accentColor, DARK_THEME_ACCENT_TONE_ADJUST) : accentColor;
-  const effectiveBackground = isDarkTheme ? CARDIO_DARK_BACKGROUND : backgroundColor;
   const surface = isDarkTheme ? CARDIO_DARK_SURFACE : CARDIO_SURFACE;
   const onSurface = isDarkTheme ? CARDIO_DARK_ON_SURFACE : CARDIO_ON_SURFACE;
-  // Светлая тема: onSurfaceVariant = onSurface (Theme.kt не задаёт отдельный приглушённый тон).
   const onSurfaceVariant = isDarkTheme ? CARDIO_DARK_ON_SURFACE_VARIANT : CARDIO_ON_SURFACE;
   const outline = isDarkTheme ? CARDIO_DARK_OUTLINE : M3_LIGHT_OUTLINE;
 
@@ -333,27 +412,35 @@ function render() {
   root.setProperty('--accent', accentColor);
   root.setProperty('--accent-topbar', topBarColor);
   root.setProperty('--on-accent-topbar', contrastingTextColor(topBarColor));
-  // "primary" — фиксированный фирменный цвет (НЕ пересчитывается из палитры), см.
-  // MaterialTheme.colorScheme.primary в Theme.kt: используется рамкой поля в фокусе,
-  // чекбоксами, переключателями, выделением свотча палитры, текстом кнопок диалога.
   root.setProperty('--primary', isDarkTheme ? CARDIO_DARK_PRIMARY : CARDIO_PRIMARY);
-  // "не требуется" — плашка/подпись/текст (см. NumberField в MainActivity.kt):
-  // фон плашки — onSurface@10%, рамка — outline@50%, подпись и текст — onSurfaceVariant@50%.
   root.setProperty('--unneeded-tint', overAlpha(onSurface, 0.10, surface));
   root.setProperty('--unneeded-outline', overAlpha(outline, 0.5, surface));
   root.setProperty('--unneeded-label', overAlpha(onSurfaceVariant, 0.5, surface));
   root.setProperty('--unneeded-text', overAlpha(onSurfaceVariant, 0.5, surface));
-  // Затенение переключателя "Пол", когда не нужен — surface@85% поверх иконок.
   root.setProperty('--sex-unneeded-shade', overAlpha(surface, UNNEEDED_SHADE_ALPHA, surface));
+  // Заливка между шапкой и вкладками — topBarColor поверх страницы (эффект наложения слоя).
+  root.setProperty('--header-fill', overAlpha(topBarColor, HEADER_FILL_OPACITY, effectiveBackground));
+  // Неактивная вкладка — полупрозрачная заливка/обводка topBarColor поверх страницы.
+  root.setProperty('--tab-inactive-bg', overAlpha(topBarColor, TAB_INACTIVE_FILL_OPACITY, effectiveBackground));
+  root.setProperty('--tab-inactive-border', overAlpha(topBarColor, TAB_INACTIVE_BORDER_OPACITY, effectiveBackground));
   document.body.style.background = effectiveBackground;
 
-  // ---- Видимость блоков/строк ----
+  // ---- Вкладки ----
+  const onOks = state.activeTab === 'oks';
+  el.tabOks.classList.toggle('active', onOks);
+  el.tabOks.classList.toggle('inactive', !onOks);
+  el.tabAfib.classList.toggle('active', !onOks);
+  el.tabAfib.classList.toggle('inactive', onOks);
+  el.pageOks.hidden = !onOks;
+  el.pageAfib.hidden = onOks;
+
+  // ==================== Страница "ОКС" ====================
   el.patientBlock.hidden = !n.patientBlockNeeded;
   el.labBlock.hidden = !n.labBlockNeeded;
   el.killipBlock.hidden = !state.showGrace;
   el.clinicalBlock.hidden = !n.clinicalSignsBlockNeeded;
 
-  el.ageSexRow.hidden = !n.ageSexRowNeeded;
+  el.ageSexRow.hidden = !n.ageSexRowNeededOks;
   el.heightWeightRow.hidden = !n.heightWeightRowNeeded;
   el.hrSbpRow.hidden = !n.hrSbpRowNeeded;
   el.creatHematRow.hidden = !n.creatinineHematocritRowNeeded;
@@ -361,42 +448,38 @@ function render() {
   el.graceChecks.hidden = !state.showGrace;
   el.crusadeChecks.hidden = !state.showCrusade;
 
-  // Скруглённый верхний угол — у первого ВИДИМОГО блока ввода.
-  const headerOf = {
+  const headerOfOks = {
     patient: el.patientBlock.querySelector('.subsection-header'),
     lab: el.labBlock.querySelector('.subsection-header'),
     killip: el.killipBlock.querySelector('.subsection-header'),
     clinical: el.clinicalBlock.querySelector('.subsection-header')
   };
-  Object.entries(headerOf).forEach(([key, headerEl]) => {
+  Object.entries(headerOfOks).forEach(([key, headerEl]) => {
     headerEl.classList.toggle('rounded-top', n.firstVisibleInputBlock === key);
   });
 
-  // ---- Поля ввода: подписи (приглушение при !needed) + значения/disabled ----
-  el.ageFieldWrap.classList.toggle('unneeded', !n.ageNeeded);
+  el.ageFieldWrap.classList.toggle('unneeded', !n.ageNeededOks);
   el.heightFieldWrap.classList.toggle('unneeded', !n.heightNeeded);
   el.weightFieldWrap.classList.toggle('unneeded', !n.weightNeeded);
   el.hrFieldWrap.classList.toggle('unneeded', !n.heartRateNeeded);
-  el.sbpFieldWrap.classList.toggle('unneeded', !n.sbpNeeded);
+  el.sbpFieldWrap.classList.toggle('unneeded', !n.sbpNeededOks);
   el.creatinineFieldWrap.classList.toggle('unneeded', !n.creatinineNeeded);
   el.hematocritFieldWrap.classList.toggle('unneeded', !n.hematocritNeeded);
 
-  setUnneededInput(el.ageInput, n.ageNeeded, state.age);
+  setUnneededInput(el.ageInput, n.ageNeededOks, state.age);
   setUnneededInput(el.heightInput, n.heightNeeded, state.height);
   setUnneededInput(el.weightInput, n.weightNeeded, state.weight);
   setUnneededInput(el.hrInput, n.heartRateNeeded, state.heartRate);
-  setUnneededInput(el.sbpInput, n.sbpNeeded, state.sbp);
+  setUnneededInput(el.sbpInput, n.sbpNeededOks, state.sbp);
   setUnneededInput(el.creatinineInput, n.creatinineNeeded, state.creatinine);
   setUnneededInput(el.hematocritInput, n.hematocritNeeded, state.hematocrit);
 
-  // ---- Переключатель "Пол" (картинки + затенение, версия 18-19) ----
-  el.sexToggle.classList.toggle('unneeded', !n.sexNeeded);
-  const maleSelected = n.sexNeeded && state.sex === 'MALE';
-  const femaleSelected = n.sexNeeded && state.sex === 'FEMALE';
-  el.sexMaleIcon.src = `icons/sex/ic_sex_male_${maleSelected ? 'active' : 'inactive'}${isDarkTheme ? '_dark' : ''}.png`;
-  el.sexFemaleIcon.src = `icons/sex/ic_sex_female_${femaleSelected ? 'active' : 'inactive'}${isDarkTheme ? '_dark' : ''}.png`;
+  el.sexToggle.classList.toggle('unneeded', !n.sexNeededOks);
+  const maleSelectedOks = n.sexNeededOks && state.sex === 'MALE';
+  const femaleSelectedOks = n.sexNeededOks && state.sex === 'FEMALE';
+  el.sexMaleIcon.src = `icons/sex/ic_sex_male_${maleSelectedOks ? 'active' : 'inactive'}${isDarkTheme ? '_dark' : ''}.png`;
+  el.sexFemaleIcon.src = `icons/sex/ic_sex_female_${femaleSelectedOks ? 'active' : 'inactive'}${isDarkTheme ? '_dark' : ''}.png`;
 
-  // ---- Killip select ----
   if (el.killipSelect.dataset.built !== '1') {
     KillipOrder.forEach((key) => {
       const opt = document.createElement('option');
@@ -408,15 +491,14 @@ function render() {
   }
   el.killipSelect.value = state.killip;
 
-  // ---- Чекбоксы ----
   el.cardiacArrestInput.checked = state.cardiacArrest;
   el.stDeviationInput.checked = state.stDeviation;
   el.elevatedEnzymesInput.checked = state.elevatedEnzymes;
   el.signsOfChfInput.checked = state.signsOfChf;
-  el.priorVascularDiseaseInput.checked = state.priorVascularDisease;
+  el.vascularDiseaseInput.checked = state.vascularDisease;
+  el.strokeHistoryInput.checked = state.strokeHistory;
   el.diabetesInput.checked = state.diabetes;
 
-  // ---- Результаты ----
   el.bmiBlock.hidden = !state.showBmi;
   el.gfrBlock.hidden = !state.showGfr;
   el.crclBlock.hidden = !state.showCrCl;
@@ -493,7 +575,8 @@ function render() {
     const crusadeResult = (sex != null && hematocrit != null && crCl != null && heartRate != null && sbp != null)
       ? crusadeScore({
           hematocrit, creatinineClearance: crCl, heartRate, sex,
-          signsOfChf: state.signsOfChf, priorVascularDisease: state.priorVascularDisease, diabetes: state.diabetes, sbp
+          signsOfChf: state.signsOfChf, priorVascularDisease: state.vascularDisease || state.strokeHistory,
+          diabetes: state.diabetes, sbp
         }) : null;
     el.crusadeValue.textContent = crusadeResult ? String(crusadeResult.points) : '—';
     el.crusadeComments.innerHTML = '';
@@ -506,23 +589,85 @@ function render() {
     }
   }
 
-  saveThemePrefs(backgroundColor, isDarkTheme);
+  // ==================== Страница "ФП" ====================
+  el.afibPatientBlock.hidden = !n.afibPatientBlockNeeded;
+  el.afibClinicalBlock.hidden = !n.afibClinicalBlockNeeded;
+  el.afibAgeSexRow.hidden = !n.ageSexRowNeededAfib;
+  el.afibSbpRow.hidden = !n.sbpRowNeededAfib;
+  el.chadsVascChecks.hidden = !state.showChadsVasc;
+  el.hasBledChecks.hidden = !state.showHasBled;
+
+  const headerOfAfib = {
+    afibPatient: el.afibPatientBlock.querySelector('.subsection-header'),
+    afibClinical: el.afibClinicalBlock.querySelector('.subsection-header')
+  };
+  Object.entries(headerOfAfib).forEach(([key, headerEl]) => {
+    headerEl.classList.toggle('rounded-top', n.firstVisibleAfibInputBlock === key);
+  });
+
+  el.afibAgeFieldWrap.classList.toggle('unneeded', !n.ageNeededAfib);
+  el.afibSbpFieldWrap.classList.toggle('unneeded', !n.sbpNeededAfib);
+  setUnneededInput(el.afibAgeInput, n.ageNeededAfib, state.age);
+  setUnneededInput(el.afibSbpInput, n.sbpNeededAfib, state.sbp);
+
+  el.afibSexToggle.classList.toggle('unneeded', !n.sexNeededAfib);
+  const maleSelectedAfib = n.sexNeededAfib && state.sex === 'MALE';
+  const femaleSelectedAfib = n.sexNeededAfib && state.sex === 'FEMALE';
+  el.afibSexMaleIcon.src = `icons/sex/ic_sex_male_${maleSelectedAfib ? 'active' : 'inactive'}${isDarkTheme ? '_dark' : ''}.png`;
+  el.afibSexFemaleIcon.src = `icons/sex/ic_sex_female_${femaleSelectedAfib ? 'active' : 'inactive'}${isDarkTheme ? '_dark' : ''}.png`;
+
+  el.afibSignsOfChfInput.checked = state.signsOfChf;
+  el.hypertensionInput.checked = state.hypertension;
+  el.afibVascularDiseaseInput.checked = state.vascularDisease;
+  el.afibStrokeHistoryInput.checked = state.strokeHistory;
+  el.afibDiabetesInput.checked = state.diabetes;
+  el.renalImpairmentInput.checked = state.renalImpairment;
+  el.hepaticImpairmentInput.checked = state.hepaticImpairment;
+  el.bleedingHistoryInput.checked = state.bleedingHistory;
+  el.labileInrInput.checked = state.labileInr;
+  el.antiplateletOrNsaidInput.checked = state.antiplateletOrNsaid;
+  el.alcoholUseInput.checked = state.alcoholUse;
+
+  el.chadsVascBlock.hidden = !state.showChadsVasc;
+  el.hasBledBlock.hidden = !state.showHasBled;
+
+  if (state.showChadsVasc) {
+    const chadsVascResult = (age != null && sex != null) ? cha2ds2VascScore({
+      age, sex,
+      chfOrLvDysfunction: state.signsOfChf, hypertension: state.hypertension, diabetes: state.diabetes,
+      strokeOrTiaOrThromboembolism: state.strokeHistory, vascularDisease: state.vascularDisease
+    }) : null;
+    el.chadsVascValue.textContent = chadsVascResult ? String(chadsVascResult.points) : '—';
+    el.chadsVascComments.innerHTML = '';
+    if (chadsVascResult) {
+      addComment(el.chadsVascComments, '*Единицы измерения: баллы');
+      addComment(el.chadsVascComments, `Рекомендация: ${chadsVascResult.interpretation}`);
+    } else {
+      addHint(el.chadsVascComments, 'возраст, пол');
+    }
+  }
+
+  if (state.showHasBled) {
+    const hasBledResult = (age != null && sbp != null) ? hasBledScore({
+      uncontrolledHypertension: sbp > 160,
+      renalImpairment: state.renalImpairment, hepaticImpairment: state.hepaticImpairment,
+      strokeHistory: state.strokeHistory, bleedingHistory: state.bleedingHistory, labileInr: state.labileInr,
+      elderly: age > 65, antiplateletOrNsaid: state.antiplateletOrNsaid, alcoholUse: state.alcoholUse
+    }) : null;
+    el.hasBledValue.textContent = hasBledResult ? String(hasBledResult.points) : '—';
+    el.hasBledComments.innerHTML = '';
+    if (hasBledResult) {
+      addComment(el.hasBledComments, '*Единицы измерения: баллы');
+      addComment(el.hasBledComments, `Категория риска: ${hasBledResult.riskCategory}`);
+    } else {
+      addHint(el.hasBledComments, 'возраст, АД сист.');
+    }
+  }
+
+  saveThemePrefs();
 }
 
-function addComment(container, text) {
-  const p = document.createElement('p');
-  p.className = 'result-comment';
-  p.textContent = text;
-  container.appendChild(p);
-}
-function addHint(container, fields) {
-  const p = document.createElement('p');
-  p.className = 'missing-hint';
-  p.textContent = `Заполните: ${fields}`;
-  container.appendChild(p);
-}
-
-// ===================== Обработчики ввода =====================
+// ===================== Обработчики ввода (страница "ОКС") =====================
 function bindTextInput(inputEl, stateKey) {
   inputEl.addEventListener('input', () => {
     state[stateKey] = inputEl.value;
@@ -536,17 +681,19 @@ bindTextInput(el.hrInput, 'heartRate');
 bindTextInput(el.sbpInput, 'sbp');
 bindTextInput(el.creatinineInput, 'creatinine');
 bindTextInput(el.hematocritInput, 'hematocrit');
+// Возраст и АД сист. — общие поля с вкладкой "ФП", держим оба input в синхроне.
+bindTextInput(el.afibAgeInput, 'age');
+bindTextInput(el.afibSbpInput, 'sbp');
 
-el.sexMale.addEventListener('click', () => {
+function setSex(value) {
   if (!needsFlags().sexNeeded) return;
-  state.sex = 'MALE';
+  state.sex = value;
   render();
-});
-el.sexFemale.addEventListener('click', () => {
-  if (!needsFlags().sexNeeded) return;
-  state.sex = 'FEMALE';
-  render();
-});
+}
+el.sexMale.addEventListener('click', () => setSex('MALE'));
+el.sexFemale.addEventListener('click', () => setSex('FEMALE'));
+el.afibSexMale.addEventListener('click', () => setSex('MALE'));
+el.afibSexFemale.addEventListener('click', () => setSex('FEMALE'));
 
 el.killipSelect.addEventListener('change', () => {
   state.killip = el.killipSelect.value;
@@ -563,17 +710,83 @@ bindCheckbox(el.cardiacArrestInput, 'cardiacArrest');
 bindCheckbox(el.stDeviationInput, 'stDeviation');
 bindCheckbox(el.elevatedEnzymesInput, 'elevatedEnzymes');
 bindCheckbox(el.signsOfChfInput, 'signsOfChf');
-bindCheckbox(el.priorVascularDiseaseInput, 'priorVascularDisease');
+bindCheckbox(el.vascularDiseaseInput, 'vascularDisease');
+bindCheckbox(el.strokeHistoryInput, 'strokeHistory');
 bindCheckbox(el.diabetesInput, 'diabetes');
 
-// ---- Сброс данных пациента (кнопка в заголовке "Пациент") ----
-el.resetPatientButton.addEventListener('click', () => {
+// ===================== Обработчики ввода (страница "ФП") =====================
+bindCheckbox(el.afibSignsOfChfInput, 'signsOfChf');
+bindCheckbox(el.hypertensionInput, 'hypertension');
+bindCheckbox(el.afibVascularDiseaseInput, 'vascularDisease');
+bindCheckbox(el.afibStrokeHistoryInput, 'strokeHistory');
+bindCheckbox(el.afibDiabetesInput, 'diabetes');
+bindCheckbox(el.renalImpairmentInput, 'renalImpairment');
+bindCheckbox(el.hepaticImpairmentInput, 'hepaticImpairment');
+bindCheckbox(el.bleedingHistoryInput, 'bleedingHistory');
+bindCheckbox(el.labileInrInput, 'labileInr');
+bindCheckbox(el.antiplateletOrNsaidInput, 'antiplateletOrNsaid');
+bindCheckbox(el.alcoholUseInput, 'alcoholUse');
+
+// ---- Сброс данных пациента (кнопка в заголовке "Пациент", общая для обеих вкладок) ----
+function resetAllPatientData() {
   state.age = ''; state.height = ''; state.weight = ''; state.sex = null;
   state.creatinine = ''; state.heartRate = ''; state.sbp = ''; state.hematocrit = '';
   state.cardiacArrest = false; state.stDeviation = false; state.elevatedEnzymes = false; state.killip = 'I';
-  state.signsOfChf = false; state.priorVascularDisease = false; state.diabetes = false;
+  state.signsOfChf = false; state.vascularDisease = false; state.strokeHistory = false; state.diabetes = false;
+  state.hypertension = false; state.renalImpairment = false; state.hepaticImpairment = false;
+  state.bleedingHistory = false; state.labileInr = false; state.antiplateletOrNsaid = false; state.alcoholUse = false;
   render();
-});
+}
+document.querySelectorAll('.reset-btn').forEach((btn) => btn.addEventListener('click', resetAllPatientData));
+
+// ===================== Переключатель вкладок "ОКС"/"ФП" =====================
+function setActiveTab(tab) {
+  if (state.activeTab === tab) return;
+  state.activeTab = tab;
+  render();
+}
+el.tabOks.addEventListener('click', () => setActiveTab('oks'));
+el.tabAfib.addEventListener('click', () => setActiveTab('afib'));
+
+// Простой свайп по содержимому для переключения вкладок (аналог HorizontalPager).
+(function enableSwipe() {
+  const content = $('content');
+  let startX = null, startY = null;
+  content.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+  }, { passive: true });
+  content.addEventListener('touchend', (e) => {
+    if (startX == null) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    startX = null; startY = null;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    if (dx < 0) setActiveTab('afib'); else setActiveTab('oks');
+  }, { passive: true });
+})();
+
+// Авто-уменьшение шрифта подписи вкладки, если она не помещается (порт AutoShrinkButtonLabel).
+function fitTabLabel(labelEl, baseSizePx, minSizePx) {
+  let size = baseSizePx;
+  labelEl.style.fontSize = size + 'px';
+  const parent = labelEl.parentElement;
+  const parentStyle = getComputedStyle(parent);
+  const paddingX = parseFloat(parentStyle.paddingLeft) + parseFloat(parentStyle.paddingRight);
+  const available = parent.clientWidth - paddingX;
+  let guard = 0;
+  while (labelEl.scrollWidth > available && size > minSizePx && guard < 40) {
+    size -= 1;
+    labelEl.style.fontSize = size + 'px';
+    guard++;
+  }
+}
+function fitAllTabLabels() {
+  fitTabLabel(el.tabOksLabel, 16, 9);
+  fitTabLabel(el.tabAfibLabel, 16, 9);
+}
+window.addEventListener('resize', fitAllTabLabels);
 
 // ===================== Меню (три черты) =====================
 function closeMenu() {
@@ -598,26 +811,86 @@ el.menuDropdown.querySelectorAll('button[data-action]').forEach((btn) => {
     if (action === 'open-theme') openThemeDialog();
     else if (action === 'open-formulas') openFormulasDialog();
     else if (action === 'open-about') openAboutDialog();
+    else if (action === 'share') shareApp();
   });
 });
 
+// ===================== "Поделиться" (аналог Intent.ACTION_SEND на Android) =====================
+const SHARE_URL = 'https://www.rustore.ru/catalog/app/com.cardioacs.app';
+function showToast(text) {
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = text;
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('show'));
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 1800);
+}
+async function shareApp() {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Кардио-калькулятор', text: 'Кардио-калькулятор', url: SHARE_URL });
+      return;
+    } catch (e) { /* пользователь отменил — ничего не делаем */ return; }
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(SHARE_URL);
+      showToast('Ссылка скопирована');
+      return;
+    } catch (e) { /* переходим к запасному варианту ниже */ }
+  }
+  window.prompt('Скопируйте ссылку:', SHARE_URL);
+}
+
 // ===================== Диалог "Тема" =====================
-let pendingBackground = backgroundColor;
+// Выбор применяется только по нажатию "Готово" (без живого предпросмотра) —
+// как и в текущей Android-версии (редактор тем недостижим из UI).
 let pendingDark = isDarkTheme;
+let pendingSelectedLightId = selectedLightId;
+let pendingSelectedDarkId = selectedDarkId;
+
+function currentPendingList() { return pendingDark ? darkThemes : lightThemes; }
+function currentPendingSelectedId() { return pendingDark ? pendingSelectedDarkId : pendingSelectedLightId; }
+
+function renderPalette() {
+  el.palette.innerHTML = '';
+  const list = currentPendingList();
+  const selectedId = currentPendingSelectedId();
+  list.forEach((entry) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'swatch' + (entry.id === selectedId ? ' selected' : '');
+    btn.style.background = entry.accent;
+    btn.addEventListener('click', () => {
+      if (pendingDark) pendingSelectedDarkId = entry.id; else pendingSelectedLightId = entry.id;
+      renderPalette();
+    });
+    el.palette.appendChild(btn);
+  });
+}
+
 function openThemeDialog() {
-  pendingBackground = backgroundColor;
   pendingDark = isDarkTheme;
+  pendingSelectedLightId = selectedLightId;
+  pendingSelectedDarkId = selectedDarkId;
   el.darkThemeSwitch.checked = pendingDark;
-  [...el.palette.children].forEach((c) => c.classList.toggle('selected', c.dataset.color === pendingBackground));
+  renderPalette();
   el.themeDialogOverlay.hidden = false;
 }
-el.darkThemeSwitch.addEventListener('change', () => { pendingDark = el.darkThemeSwitch.checked; });
+el.darkThemeSwitch.addEventListener('change', () => {
+  pendingDark = el.darkThemeSwitch.checked;
+  renderPalette();
+});
 el.themeDialogOverlay.querySelector('[data-action="cancel-theme"]').addEventListener('click', () => {
   el.themeDialogOverlay.hidden = true;
 });
 el.themeDialogOverlay.querySelector('[data-action="confirm-theme"]').addEventListener('click', () => {
   isDarkTheme = pendingDark;
-  backgroundColor = pendingBackground;
+  selectedLightId = pendingSelectedLightId;
+  selectedDarkId = pendingSelectedDarkId;
   el.themeDialogOverlay.hidden = true;
   render();
 });
@@ -629,6 +902,8 @@ function openFormulasDialog() {
   el.toggleCrCl.checked = state.showCrCl;
   el.toggleGrace.checked = state.showGrace;
   el.toggleCrusade.checked = state.showCrusade;
+  el.toggleChadsVasc.checked = state.showChadsVasc;
+  el.toggleHasBled.checked = state.showHasBled;
   el.formulasDialogOverlay.hidden = false;
 }
 function bindFormulaToggle(inputEl, stateKey) {
@@ -642,6 +917,8 @@ bindFormulaToggle(el.toggleGfr, 'showGfr');
 bindFormulaToggle(el.toggleCrCl, 'showCrCl');
 bindFormulaToggle(el.toggleGrace, 'showGrace');
 bindFormulaToggle(el.toggleCrusade, 'showCrusade');
+bindFormulaToggle(el.toggleChadsVasc, 'showChadsVasc');
+bindFormulaToggle(el.toggleHasBled, 'showHasBled');
 el.formulasDialogOverlay.querySelector('[data-action="close-formulas"]').addEventListener('click', () => {
   el.formulasDialogOverlay.hidden = true;
 });
@@ -661,3 +938,4 @@ if ('serviceWorker' in navigator) {
 
 // ===================== Первый рендер =====================
 render();
+fitAllTabLabels();

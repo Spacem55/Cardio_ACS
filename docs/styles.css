@@ -1,28 +1,31 @@
-/* Кардио-калькулятор ОКС — веб-версия (v2.0, "с нуля").
+/* Кардио-калькулятор — веб-версия (v3.0).
    Цветовые переменные (--background, --surface, --on-surface, --on-surface-variant,
-   --outline, --accent, --accent-topbar, --on-accent-topbar, --unneeded-*) выставляются
-   ДИНАМИЧЕСКИ из app.js при каждом рендере (см. render()) — они зависят от выбранного
-   цвета фона (палитра) и тёмной темы, поэтому здесь заданы только безопасные
-   значения по умолчанию на случай, если скрипт ещё не отработал. */
+   --outline, --accent, --accent-topbar, --on-accent-topbar, --unneeded-*, --header-fill,
+   --tab-inactive-*) выставляются ДИНАМИЧЕСКИ из app.js при каждом рендере (см. render()) —
+   они зависят от выбранного набора темы (фон+акцент) и тёмной темы, поэтому здесь
+   заданы только безопасные значения по умолчанию на случай, если скрипт ещё не отработал. */
 :root {
-  --background: #AECEF9;
+  --background: #CDDCF0;
   --surface: #FFFFFF;
   --on-surface: #1B1B1B;
   --on-surface-variant: #1B1B1B;
   --outline: #79747E;
-  --accent: #3A75C4;
-  --accent-topbar: #3A75C4;
+  --accent: #2E5E9D;
+  --accent-topbar: #2E5E9D;
   --on-accent-topbar: #FFFFFF;
   /* "primary" — ФИКСИРОВАННЫЙ фирменный цвет (CardioPrimary/CardioDarkPrimary), НЕ
-     пересчитывается из выбранной палитры (в отличие от --accent выше). Используется
+     пересчитывается из выбранной темы (в отличие от --accent выше). Используется
      Material3-компонентами по умолчанию: рамка поля в фокусе, чекбоксы, переключатели,
-     выделение свотча палитры, текст кнопок диалога. */
+     выделение свотча темы, текст кнопок диалога. */
   --primary: #3A75C4;
   --unneeded-tint: rgba(27, 27, 27, 0.10);
   --unneeded-outline: rgba(121, 116, 126, 0.5);
   --unneeded-label: rgba(27, 27, 27, 0.5);
   --unneeded-text: rgba(27, 27, 27, 0.5);
   --sex-unneeded-shade: rgba(255, 255, 255, 0.85);
+  --header-fill: rgba(46, 94, 157, 0.31);
+  --tab-inactive-bg: rgba(46, 94, 157, 0.57);
+  --tab-inactive-border: rgba(46, 94, 157, 0.96);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -44,11 +47,16 @@ html, body {
   background: var(--background);
 }
 
-/* ---- Заголовок (topBarColor = accentColor, тонированный в тёмной теме) ---- */
-#titleBar {
+/* ---- Заголовок + вкладки: закреплены сверху одним блоком (не прокручиваются) ---- */
+#topBar {
   position: sticky;
   top: 0;
   z-index: 20;
+}
+
+/* ---- Заголовок (topBarColor = accentColor, тонированный в тёмной теме) ---- */
+#titleBar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -109,6 +117,51 @@ html, body {
   cursor: pointer;
 }
 .dropdown button:active { background: rgba(128,128,128,0.15); }
+
+/* ---- Переключатель вкладок "ОКС" / "ФП" ---- */
+#tabBarWrap {
+  position: relative;
+  background: var(--header-fill);
+  padding: 8px 16px 14px 16px;
+}
+.tab-bar {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.tab-btn {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  border-radius: 18px;
+  padding: 0 8px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+}
+.tab-btn .tab-label {
+  white-space: nowrap;
+  overflow: hidden;
+}
+.tab-btn.inactive {
+  background: var(--tab-inactive-bg);
+  border: 1.5px solid var(--tab-inactive-border);
+  color: var(--on-accent-topbar);
+}
+.tab-btn.active {
+  background: var(--background);
+  border: 1.5px solid var(--accent-topbar);
+  color: var(--on-surface);
+  transform: translateY(6px);
+  height: 48px;
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
 
 /* ---- Контент ---- */
 #content {
@@ -261,6 +314,10 @@ html, body {
 .select-arrow { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--on-surface-variant); }
 
 #graceChecks, #crusadeChecks { display: flex; flex-direction: column; gap: 10px; }
+/* На вкладке "ФП" интервал между строками сведён к минимуму (порт afibCheckboxSpacing=0,
+   финальное значение после калибровки на Android) — подсказки под чекбоксами дают
+   собственный визуальный зазор, доп. gap не нужен. */
+#chadsVascChecks, #hasBledChecks { display: flex; flex-direction: column; gap: 2px; }
 
 .checkbox-row {
   display: flex;
@@ -276,6 +333,15 @@ html, body {
   accent-color: var(--primary);
   flex-shrink: 0;
 }
+.checkbox-row.hint-row { margin-bottom: 0; }
+.checkbox-hint {
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--on-surface-variant);
+  margin: 0 0 2px 30px;
+}
+
+.page { display: flex; flex-direction: column; gap: 16px; }
 
 .result-comment, .missing-hint {
   font-size: 12px;
@@ -360,6 +426,26 @@ html, body {
 .swatch.selected { border: 3px solid var(--primary); }
 
 .dialog-hint { font-size: 13px; color: var(--on-surface-variant); margin: 0 0 4px 0; }
+.formula-group-title { font-size: 15px; font-weight: 700; margin: 4px 0 0 0; }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  transform: translateX(-50%) translateY(8px);
+  background: rgba(20,20,20,0.9);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 20px;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  z-index: 200;
+  pointer-events: none;
+  max-width: 80vw;
+  text-align: center;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 .about-title { font-weight: 700; font-size: 16px; margin: 0; }
 .about-version { font-size: 13px; color: var(--on-surface-variant); margin: 0; }
